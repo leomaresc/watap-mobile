@@ -23,39 +23,6 @@ class SteamApiEndpoints {
 
   /// Resolución de un nombre personalizado a SteamID64.
   static const String resolveVanityUrl = '/ISteamUser/ResolveVanityURL/v1/';
-
-  // --- Servicios internos del cliente de Steam -----------------------------
-  //
-  // No aparecen en la documentación pública de Valve, pero son los mismos que
-  // usa el cliente oficial. Todos exigen un `access_token` de una sesión de
-  // Steam iniciada; la clave de Web API no sirve para ellos.
-
-  /// Grupo familiar de la cuenta autenticada.
-  static const String familyGroupForUser =
-      '/IFamilyGroupsService/GetFamilyGroupForUser/v1/';
-
-  /// Detalle de un grupo familiar (nombre e integrantes).
-  static const String familyGroup = '/IFamilyGroupsService/GetFamilyGroup/v1/';
-
-  /// `IAuthenticationService`: clave pública para cifrar la contraseña.
-  static const String passwordRsaPublicKey =
-      '/IAuthenticationService/GetPasswordRSAPublicKey/v1/';
-
-  /// `IAuthenticationService`: inicio de sesión con credenciales.
-  static const String beginAuthSession =
-      '/IAuthenticationService/BeginAuthSessionViaCredentials/v1/';
-
-  /// `IAuthenticationService`: entrega del código de Steam Guard.
-  static const String updateAuthSessionWithGuardCode =
-      '/IAuthenticationService/UpdateAuthSessionWithSteamGuardCode/v1/';
-
-  /// `IAuthenticationService`: consulta del estado del inicio de sesión.
-  static const String pollAuthSessionStatus =
-      '/IAuthenticationService/PollAuthSessionStatus/v1/';
-
-  /// `IAuthenticationService`: renovación del token de acceso.
-  static const String generateAccessTokenForApp =
-      '/IAuthenticationService/GenerateAccessTokenForApp/v1/';
 }
 
 /// Constructores de URL de la aplicación.
@@ -105,21 +72,6 @@ class SteamApiUrls {
       },
     );
   }
-
-  /// Servicio interno de Steam (`api.steampowered.com`).
-  ///
-  /// Ni la clave de Web API ni el `access_token` viajan aquí: se envían en el
-  /// cuerpo de la solicitud `POST`, de modo que nunca aparecen en una URL.
-  static Uri authService(String path) =>
-      Uri.parse('${AppConstants.steamAuthBaseUrl}$path');
-
-  /// `IFamilyGroupsService/GetFamilyGroupForUser/v1`
-  static Uri familyGroupForUser() =>
-      Uri.parse('$_apiBase${SteamApiEndpoints.familyGroupForUser}');
-
-  /// `IFamilyGroupsService/GetFamilyGroup/v1`
-  static Uri familyGroup() =>
-      Uri.parse('$_apiBase${SteamApiEndpoints.familyGroup}');
 
   /// Portada oficial del juego en el CDN público de Steam.
   ///

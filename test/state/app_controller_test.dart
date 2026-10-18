@@ -57,34 +57,22 @@ void main() {
   initTestDatabaseFactory();
 
   group('configuración inicial', () {
-    test('sin clave ni sesión la app no está lista', () async {
+    test('sin clave la app no está lista', () async {
       final TestEnvironment env = await buildTestEnvironment(httpClient: _fake());
       addTearDown(env.dispose);
 
       expect(env.controller.hasApiKey, isFalse);
-      expect(env.controller.hasSteamSession, isFalse);
       expect(env.controller.onboardingComplete, isFalse);
       expect(env.controller.profiles, isEmpty);
     });
 
-    test('con clave y sesión la app está lista', () async {
-      final TestEnvironment env = await buildTestEnvironment(
-        httpClient: _fake(),
-        apiKey: _key,
-        session: const SteamSession(
-          steamId64: '76561198000000000',
-          accessToken: 'token-de-prueba',
-          refreshToken: 'refresh-de-prueba',
-          accountName: 'cuenta-prueba',
-          savedAtUnix: 1,
-        ),
-      );
+    test('con clave la app está lista', () async {
+      final TestEnvironment env =
+          await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
       addTearDown(env.dispose);
 
       expect(env.controller.hasApiKey, isTrue);
-      expect(env.controller.hasSteamSession, isTrue);
       expect(env.controller.onboardingComplete, isTrue);
-      expect(env.controller.steamAccountName, 'cuenta-prueba');
     });
   });
 
@@ -94,22 +82,21 @@ void main() {
           await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
       addTearDown(env.dispose);
 
-      final OperationResult result = await env.controller.addRescueProfile(_id);
+      final OperationResult result = await env.controller.addProfile(_id);
 
       expect(result.success, isTrue);
       expect(result.steamId64, _id);
       expect(env.controller.profiles, hasLength(1));
       expect(env.controller.profiles.single.personaName, 'Jugador $_id');
-      expect(env.controller.profiles.single.isFamilyMember, isFalse);
     });
 
     test('no se puede añadir dos veces el mismo perfil', () async {
       final TestEnvironment env =
           await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
       addTearDown(env.dispose);
-      await env.controller.addRescueProfile(_id);
+      await env.controller.addProfile(_id);
 
-      final OperationResult result = await env.controller.addRescueProfile(_id);
+      final OperationResult result = await env.controller.addProfile(_id);
 
       expect(result.success, isFalse);
       expect(result.messageEs, contains('ya está'));
@@ -120,7 +107,7 @@ void main() {
       final TestEnvironment env = await buildTestEnvironment(httpClient: _fake());
       addTearDown(env.dispose);
 
-      final OperationResult result = await env.controller.addRescueProfile('ana');
+      final OperationResult result = await env.controller.addProfile('ana');
 
       expect(result.success, isFalse);
       expect(result.messageEs, contains('clave'));
@@ -131,7 +118,7 @@ void main() {
           await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
       addTearDown(env.dispose);
 
-      final OperationResult result = await env.controller.addRescueProfile('ana');
+      final OperationResult result = await env.controller.addProfile('ana');
 
       expect(result.success, isTrue);
       expect(env.controller.profiles.single.steamId64, _id);
@@ -143,7 +130,7 @@ void main() {
       addTearDown(env.dispose);
 
       final OperationResult result =
-          await env.controller.addRescueProfile('desconocido');
+          await env.controller.addProfile('desconocido');
 
       expect(result.success, isFalse);
       expect(result.messageEs, contains('No existe'));
@@ -153,12 +140,44 @@ void main() {
       final TestEnvironment env =
           await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
       addTearDown(env.dispose);
-      await env.controller.addRescueProfile(_id);
+      await env.controller.addProfile(_id);
 
       final OperationResult result = await env.controller.deleteProfile(_id);
 
       expect(result.success, isTrue);
       expect(env.controller.profiles, isEmpty);
+    });
+  });
+
+  group('importación masiva', () {
+    test('importar una lista añade los perfiles válidos', () async {
+      final TestEnvironment env =
+          await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
+      addTearDown(env.dispose);
+
+      // 'ana' resuelve al mismo SteamID64 que _id, así que se omite como
+      // duplicado. 'no-existe' (vanity inexistente) y 'entrada mala con
+      // espacios' (inválida) se descartan.
+      final ImportResult result = await env.controller.importMembers(
+        <String>[_id, 'ana', 'no-existe', 'entrada mala con espacios'],
+      );
+
+      expect(result.added, 1);
+      expect(result.failed, 2);
+      expect(env.controller.profiles, hasLength(1));
+      expect(env.controller.profiles.single.steamId64, _id);
+    });
+
+    test('sin clave, la importación se rechaza', () async {
+      final TestEnvironment env = await buildTestEnvironment(httpClient: _fake());
+      addTearDown(env.dispose);
+
+      final ImportResult result =
+          await env.controller.importMembers(<String>[_id]);
+
+      expect(result.isError, isTrue);
+      expect(result.added, 0);
+      expect(result.messageEs, contains('clave'));
     });
   });
 
@@ -196,7 +215,7 @@ void main() {
       final TestEnvironment env =
           await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
       addTearDown(env.dispose);
-      await env.controller.addRescueProfile(_id);
+      await env.controller.addProfile(_id);
 
       await env.controller.refreshProfile(_id);
 
@@ -211,7 +230,7 @@ void main() {
       final TestEnvironment env =
           await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
       addTearDown(env.dispose);
-      await env.controller.addRescueProfile(_id);
+      await env.controller.addProfile(_id);
       await env.controller.refreshProfile(_id);
       expect(env.controller.gamesStoredCount, greaterThan(0));
 

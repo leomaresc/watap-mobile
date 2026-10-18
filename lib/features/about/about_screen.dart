@@ -113,8 +113,7 @@ class AboutScreen extends StatelessWidget {
             title: 'Estado de los datos en esta sesión',
             body: 'Perfiles reales guardados: ${controller.profiles.length}. '
                 'Juegos almacenados: ${controller.gamesStoredCount}. '
-                'Clave de API: ${controller.hasApiKey ? "configurada" : "no configurada"}. '
-                'Sesión de Steam: ${controller.hasSteamSession ? "activa" : "sin iniciar"}.',
+                'Clave de API: ${controller.hasApiKey ? "configurada" : "no configurada"}.',
           ),
           SectionCard(
             title: 'ENLACES',
@@ -154,9 +153,8 @@ class AboutScreen extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             'Endpoints utilizados: ${SteamApiEndpoints.recentlyPlayed.trim()}, '
-            '${SteamApiEndpoints.playerSummaries.trim()}, '
-            '${SteamApiEndpoints.resolveVanityUrl.trim()} y '
-            '${SteamApiEndpoints.familyGroupForUser.trim()}.',
+            '${SteamApiEndpoints.playerSummaries.trim()} y '
+            '${SteamApiEndpoints.resolveVanityUrl.trim()}.',
             style: const TextStyle(
               fontSize: 11,
               color: WatapColors.textSecondary,

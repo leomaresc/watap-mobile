@@ -32,15 +32,12 @@ void main() {
         steamId64: '76561198000000000',
         personaName: 'Nombre Público',
         isFamilyMember: true,
-        isOwnProfile: true,
         createdAtUnix: 7,
       );
       final Map<String, Object?> map = profile.toMap();
       expect(map['is_family_member'], 1);
-      expect(map['is_own_profile'], 1);
       final Profile restored = Profile.fromMap(map);
       expect(restored.isFamilyMember, isTrue);
-      expect(restored.isOwnProfile, isTrue);
       expect(restored.steamId64, profile.steamId64);
       expect(restored.personaName, profile.personaName);
     });

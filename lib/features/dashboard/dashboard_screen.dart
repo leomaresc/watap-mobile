@@ -5,7 +5,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../services/family_group_sync.dart';
 import '../../state/app_controller.dart';
 import '../../widgets/app_bottom_navigation.dart';
 import '../../widgets/watap_header.dart';
@@ -60,8 +59,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget build(BuildContext context) {
     final AppController controller = AppScope.of(context);
 
-    // Sin clave de API y sin sesión de Steam la aplicación no puede consultar
-    // nada: se muestra el asistente de configuración en lugar del panel.
+    // Sin clave de API la aplicación no puede consultar nada: se muestra el
+    // asistente de configuración en lugar del panel principal.
     if (!controller.onboardingComplete) {
       return const OnboardingScreen();
     }
@@ -94,12 +93,15 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Future<void> _refreshAll(BuildContext context, AppController controller) async {
     if (!controller.hasProfiles) {
-      final FamilySyncOutcome outcome =
-          await controller.syncFamilyGroup();
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(outcome.messageEs)));
-      if (!outcome.success) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Todavía no hay integrantes. Ve a la sección Integrantes para '
+            'importarlos.',
+          ),
+        ),
+      );
+      return;
     }
     await controller.refreshAll();
   }

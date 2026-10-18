@@ -115,15 +115,11 @@ class _AddEditProfileScreenState extends State<AddEditProfileScreen> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          widget.profile!.isFamilyMember
-                              ? 'Integrante del grupo familiar'
-                              : 'Perfil añadido a mano (rescate)',
+                          'Perfil supervisado',
                           style: TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w600,
-                            color: widget.profile!.isFamilyMember
-                                ? WatapColors.success
-                                : WatapColors.warning,
+                            color: WatapColors.success,
                           ),
                         ),
                       ],
@@ -144,21 +140,11 @@ class _AddEditProfileScreenState extends State<AddEditProfileScreen> {
                 validator: validateAlias,
               ),
               const SizedBox(height: 12),
-              if (widget.profile!.isFamilyMember)
-                const InlineNotice(
-                  message: 'Este integrante viene del grupo familiar de Steam. '
-                      'Si lo eliminas, la próxima sincronización lo volverá a '
-                      'añadir.',
-                  icon: Icons.info_outline,
-                ),
             ] else ...<Widget>[
               const InlineNotice(
-                message: 'El alta normal la hace WATAP sola, con los integrantes '
-                    'de tu grupo familiar de Steam. Esto es solo un caso '
-                    'excepcional: añade aquí un perfil que no esté en tu grupo '
-                    'familiar.',
-                icon: Icons.warning_amber_outlined,
-                color: WatapColors.warning,
+                message: 'Añade un perfil de Steam por SteamID64, URL o nombre '
+                    'personalizado.',
+                icon: Icons.info_outline,
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -299,7 +285,7 @@ class _AddEditProfileScreenState extends State<AddEditProfileScreen> {
     _saving = true;
     setState(() {});
     final OperationResult result =
-        await controller.addRescueProfile(_inputController.text);
+        await controller.addProfile(_inputController.text);
     _saving = false;
     if (!mounted) return;
     setState(() {});

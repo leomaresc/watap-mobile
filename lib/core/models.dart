@@ -109,108 +109,6 @@ class VanityResolution {
   final String? messageEs;
 }
 
-/// Sesión de Steam obtenida al iniciar sesión.
-///
-/// Los tokens se guardan **exclusivamente** en el almacenamiento seguro del
-/// dispositivo (nunca en SQLite ni en JSON en claro). El `accessToken` es el que
-/// permite consultar el grupo familiar.
-class SteamSession {
-  const SteamSession({
-    required this.steamId64,
-    required this.accessToken,
-    required this.refreshToken,
-    this.accountName,
-    required this.savedAtUnix,
-  });
-
-  /// Cuenta autenticada. Es también "mi perfil" dentro de la aplicación.
-  final String steamId64;
-
-  final String accessToken;
-  final String refreshToken;
-
-  /// Nombre de la cuenta usado al iniciar sesión (dato público del propio
-  /// usuario; se guarda para mostrarlo en Ajustes).
-  final String? accountName;
-
-  final int savedAtUnix;
-
-  SteamSession copyWith({
-    String? steamId64,
-    String? accessToken,
-    String? refreshToken,
-    String? accountName,
-    int? savedAtUnix,
-  }) {
-    return SteamSession(
-      steamId64: steamId64 ?? this.steamId64,
-      accessToken: accessToken ?? this.accessToken,
-      refreshToken: refreshToken ?? this.refreshToken,
-      accountName: accountName ?? this.accountName,
-      savedAtUnix: savedAtUnix ?? this.savedAtUnix,
-    );
-  }
-
-  @override
-  String toString() => 'SteamSession($steamId64)';
-}
-
-/// Respuesta de `IFamilyGroupsService/GetFamilyGroupForUser`.
-class FamilyGroupForUser {
-  const FamilyGroupForUser({
-    required this.familyGroupId,
-    required this.isNotMemberOfAnyGroup,
-  });
-
-  const FamilyGroupForUser.none()
-      : familyGroupId = null,
-        isNotMemberOfAnyGroup = true;
-
-  final String? familyGroupId;
-  final bool isNotMemberOfAnyGroup;
-
-  /// `true` cuando la cuenta pertenece a algún grupo familiar.
-  bool get hasGroup => !isNotMemberOfAnyGroup && (familyGroupId ?? '').isNotEmpty;
-}
-
-/// Un integrante del grupo familiar.
-class FamilyGroupMember {
-  const FamilyGroupMember({
-    required this.steamId64,
-    this.role,
-    this.timeJoinedUnix,
-  });
-
-  final String steamId64;
-
-  /// Rol dentro del grupo (por ejemplo, 0 = adulto, 1 = menor). Puede faltar.
-  final int? role;
-
-  final int? timeJoinedUnix;
-}
-
-/// Respuesta de `IFamilyGroupsService/GetFamilyGroup`.
-class FamilyGroup {
-  const FamilyGroup({
-    required this.familyGroupId,
-    this.name,
-    this.members = const <FamilyGroupMember>[],
-    this.freeSpots,
-  });
-
-  final String familyGroupId;
-  final String? name;
-  final List<FamilyGroupMember> members;
-  final int? freeSpots;
-
-  List<String> get memberSteamIds =>
-      members.map((FamilyGroupMember m) => m.steamId64).toList(growable: false);
-
-  @override
-  String toString() =>
-      'FamilyGroup($familyGroupId, ${members.length} integrantes)';
-}
-
 /// Perfil supervisado por la aplicación.
 ///
 /// Los integrantes se obtienen automáticamente del grupo familiar de Steam. La
@@ -221,7 +119,7 @@ class Profile {
     this.personaName,
     this.avatarUrl,
     this.alias,
-    this.isOwnProfile = false,
+
     this.isFamilyMember = false,
     required this.createdAtUnix,
   });
@@ -236,8 +134,8 @@ class Profile {
   /// Nombre local opcional definido por el usuario para distinguir personas.
   final String? alias;
 
-  /// `true` para la cuenta con la que el usuario ha iniciado sesión en Steam.
-  final bool isOwnProfile;
+
+
 
   /// `true` si el perfil se ha obtenido del grupo familiar de Steam.
   final bool isFamilyMember;
@@ -259,7 +157,7 @@ class Profile {
     String? avatarUrl,
     String? alias,
     bool clearAlias = false,
-    bool? isOwnProfile,
+
     bool? isFamilyMember,
     int? createdAtUnix,
   }) {
@@ -268,7 +166,7 @@ class Profile {
       personaName: personaName ?? this.personaName,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       alias: clearAlias ? null : (alias ?? this.alias),
-      isOwnProfile: isOwnProfile ?? this.isOwnProfile,
+
       isFamilyMember: isFamilyMember ?? this.isFamilyMember,
       createdAtUnix: createdAtUnix ?? this.createdAtUnix,
     );
@@ -279,7 +177,7 @@ class Profile {
         'persona_name': personaName,
         'avatar_url': avatarUrl,
         'alias': alias,
-        'is_own_profile': isOwnProfile ? 1 : 0,
+
         'is_family_member': isFamilyMember ? 1 : 0,
         'created_at': createdAtUnix,
       };
@@ -289,7 +187,7 @@ class Profile {
         personaName: map['persona_name'] as String?,
         avatarUrl: map['avatar_url'] as String?,
         alias: map['alias'] as String?,
-        isOwnProfile: _asBool(map['is_own_profile']),
+
         isFamilyMember: _asBool(map['is_family_member']),
         createdAtUnix: _asInt(map['created_at']) ?? 0,
       );
@@ -301,7 +199,7 @@ class Profile {
       other.personaName == personaName &&
       other.avatarUrl == avatarUrl &&
       other.alias == alias &&
-      other.isOwnProfile == isOwnProfile &&
+
       other.isFamilyMember == isFamilyMember &&
       other.createdAtUnix == createdAtUnix;
 
@@ -311,7 +209,7 @@ class Profile {
         personaName,
         avatarUrl,
         alias,
-        isOwnProfile,
+
         isFamilyMember,
         createdAtUnix,
       );

@@ -89,14 +89,9 @@ void main() {
       await repository.upsert(
         const Profile(steamId64: '76561198000000009', personaName: 'Bruno', createdAtUnix: 2),
       );
-      await repository.setOwnProfile(_id);
-      await repository.setOwnProfile('76561198000000009');
       final List<Profile> loaded = await repository.loadAll();
-      expect(loaded.where((Profile pr) => pr.isOwnProfile), hasLength(1));
-      expect(
-        loaded.firstWhere((Profile pr) => pr.isOwnProfile).steamId64,
-        '76561198000000009',
-      );
+      expect(loaded, hasLength(2));
+      expect(loaded.first.steamId64, _id);
     });
 
     test('eliminar un perfil borra su actividad y sus juegos', () async {

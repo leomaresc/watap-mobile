@@ -8,12 +8,10 @@ import '../../core/constants.dart';
 import '../../core/models.dart';
 import '../../core/validators.dart';
 import '../../data/steam/steam_api_client.dart';
-import '../../services/family_group_sync.dart';
 import '../../state/app_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/ui_helpers.dart';
 import '../about/about_screen.dart';
-import '../onboarding/steam_login_screen.dart';
 import 'api_key_screen.dart';
 import 'privacy_screen.dart';
 
@@ -29,83 +27,6 @@ class SettingsScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 28),
       children: <Widget>[
-        SectionCard(
-          title: 'CUENTA DE STEAM',
-          subtitle: 'Con la sesión iniciada, WATAP lee tu grupo familiar y carga '
-              'los integrantes automáticamente',
-          children: <Widget>[
-            ListTile(
-              leading: Icon(
-                controller.hasSteamSession ? Icons.link : Icons.link_off,
-                color: controller.hasSteamSession
-                    ? WatapColors.success
-                    : WatapColors.warning,
-              ),
-              title: Text(
-                controller.hasSteamSession
-                    ? (controller.steamAccountName == null
-                        ? 'Sesión de Steam activa'
-                        : 'Conectado como ${controller.steamAccountName}')
-                    : 'Sin sesión de Steam',
-              ),
-              subtitle: Text(
-                controller.hasSteamSession
-                    ? 'Los tokens se guardan cifrados en el dispositivo. '
-                        'WATAP no conserva tu contraseña.'
-                    : 'Inicia sesión una vez para que WATAP pueda leer el grupo '
-                        'familiar.',
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (BuildContext _) => const SteamLoginScreen(),
-                ),
-              ),
-            ),
-            if (controller.hasSteamSession) ...<Widget>[
-              ListTile(
-                leading: const Icon(Icons.sync),
-                title: const Text('Sincronizar el grupo familiar'),
-                subtitle: Text(
-                  'Ahora mismo hay ${controller.familyMembers.length} integrantes '
-                  'del grupo familiar',
-                ),
-                onTap: () async {
-                  final FamilySyncOutcome outcome =
-                      await controller.syncFamilyGroup();
-                  if (!context.mounted) return;
-                  showMessage(
-                    context,
-                    outcome.messageEs,
-                    isError: !outcome.success,
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.logout),
-                title: const Text('Cerrar sesión de Steam'),
-                subtitle: const Text(
-                  'Elimina los tokens del dispositivo. Los integrantes guardados '
-                  'se conservan.',
-                ),
-                onTap: () async {
-                  final bool confirmed = await confirmAction(
-                    context,
-                    title: 'Cerrar sesión de Steam',
-                    message: 'Se eliminarán del dispositivo los tokens de la '
-                        'sesión. Tendrás que iniciar sesión otra vez para volver '
-                        'a leer el grupo familiar.',
-                  );
-                  if (!confirmed || !context.mounted) return;
-                  final OperationResult result = await controller.logoutSteam();
-                  if (!context.mounted) return;
-                  showMessage(context, result.messageEs, isError: !result.success);
-                },
-              ),
-            ],
-          ],
-        ),
-        const SizedBox(height: 16),
         SectionCard(
           title: 'STEAM WEB API',
           subtitle: 'La clave se guarda solo en el almacenamiento seguro del '

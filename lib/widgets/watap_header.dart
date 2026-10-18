@@ -119,18 +119,8 @@ class WatapHeader extends StatelessWidget implements PreferredSizeWidget {
   /// subtítulo habitual de la aplicación.
   static String? _contextLine(AppController controller) {
     if (!controller.hasApiKey) return 'Falta la clave de Steam Web API.';
-    if (!controller.hasSteamSession) {
-      return 'Conecta tu cuenta de Steam para leer el grupo familiar.';
-    }
-    final String? group = controller.familyGroupName;
-    if (group != null && group.trim().isNotEmpty) {
-      return 'Grupo familiar: ${group.trim()}';
-    }
-    if (controller.steamAccountName != null) {
-      return 'Conectado como ${controller.steamAccountName}';
-    }
     if (!controller.hasProfiles) {
-      return 'Sincroniza para cargar los integrantes del grupo familiar.';
+      return 'Importa integrantes para empezar a ver actividad.';
     }
     return null;
   }

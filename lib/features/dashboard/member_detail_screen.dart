@@ -86,10 +86,6 @@ class MemberDetailScreen extends StatelessWidget {
               ),
               _InfoRow(label: 'Alias local', value: profile.alias ?? 'Sin alias'),
               _InfoRow(
-                label: 'Perfil propio',
-                value: profile.isOwnProfile ? 'Sí (marcado manualmente)' : 'No',
-              ),
-              _InfoRow(
                 label: 'Añadido',
                 value: formatLocalDateTime(profile.createdAtUnix),
               ),
@@ -137,15 +133,6 @@ class MemberDetailScreen extends StatelessWidget {
                   action: 'abrir el perfil de Steam',
                 ),
               ),
-              if (profile.steamId64 == controller.steamId64)
-                const ListTile(
-                  leading: Icon(Icons.verified_outlined),
-                  title: Text('Tu cuenta conectada'),
-                  subtitle: Text(
-                    'Es la cuenta con la que iniciaste sesión en Steam para '
-                    'leer el grupo familiar.',
-                  ),
-                ),
             ],
           ),
         ],
