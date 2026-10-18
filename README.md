@@ -170,6 +170,17 @@ El proyecto se desarrolló y verificó con:
 
 ## 6. Compilación e instalación
 
+### 6.0 APK ya compilado (prueba rápida)
+
+Si solo quieres probar la aplicación, hay un APK Release adjunto en la página de
+*releases* del repositorio:
+
+**<https://github.com/leomaresc/watap-mobile/releases/latest>**
+
+Descarga `app-release.apk`, ábrelo en el teléfono y permite la instalación desde
+orígenes desconocidos. Recuerda que ese APK está firmado con las **claves de
+depuración** (ver [6.5](#65-firma-de-la-versión-release)).
+
 ### 6.1 Preparar el proyecto
 
 ```bash
