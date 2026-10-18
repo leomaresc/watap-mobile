@@ -41,6 +41,30 @@ class AppConstants {
   /// dispositivo. No es un secreto: es solo el nombre de la entrada.
   static const String apiKeyStorageKey = 'watap.steam.webapi.key';
 
+  // --- Sesión de Steam y grupo familiar ------------------------------------
+
+  /// Entradas del almacén seguro para la sesión de Steam.
+  ///
+  /// Son solo nombres de entrada; los valores (tokens) nunca se escriben en la
+  /// base de datos ni en ningún archivo.
+  static const String steamAccessTokenStorageKey = 'watap.steam.access.token';
+  static const String steamRefreshTokenStorageKey = 'watap.steam.refresh.token';
+  static const String steamIdStorageKey = 'watap.steam.id';
+  static const String steamAccountNameStorageKey = 'watap.steam.account.name';
+
+  /// Servicio de autenticación de Steam (flujo oficial del cliente).
+  ///
+  /// Endpoint **interno** (no listado en la documentación pública de Valve),
+  /// pero es el mismo que usan el cliente y la aplicación móvil de Steam.
+  static const String steamAuthBaseUrl = 'https://api.steampowered.com';
+
+  /// `IPlayerService/GetRecentlyPlayedGames` y compañía aceptan tanto `key`
+  /// como `access_token`; el grupo familiar **solo** acepta `access_token`.
+  static const String steamFamilyGroupForUserPath =
+      '/IFamilyGroupsService/GetFamilyGroupForUser/v1/';
+  static const String steamFamilyGroupPath =
+      '/IFamilyGroupsService/GetFamilyGroup/v1/';
+
   // --- Red -----------------------------------------------------------------
 
   /// Tiempo máximo por solicitud HTTPS.
@@ -51,6 +75,20 @@ class AppConstants {
 
   /// Límite documentado de la API para listas de SteamID64 en una sola llamada.
   static const int maxSteamIdsPerBatch = 100;
+
+  /// Identificador de plataforma que se envía al iniciar sesión en Steam.
+  ///
+  /// 2 corresponde a "móvil" en el flujo de `IAuthenticationService`.
+  static const String steamLoginPlatformType = '2';
+
+  /// Nombre de dispositivo que Steam mostrará en la lista de sesiones.
+  static const String steamLoginDeviceName = 'WATAP Mobile';
+
+  /// Número máximo de consultas al estado del acceso antes de rendirse.
+  ///
+  /// Con el intervalo que indica Steam (unos 5 s), permite esperar algo más de
+  /// dos minutos a que el usuario confirme desde su teléfono.
+  static const int steamLoginMaxPollAttempts = 24;
 
   /// Reintentos adicionales ante errores transitorios (5xx / red).
   static const int maxTransientRetries = 1;
@@ -72,7 +110,7 @@ class AppConstants {
   // --- Base de datos -------------------------------------------------------
 
   static const String databaseFileName = 'watap.db';
-  static const int databaseVersion = 3;
+  static const int databaseVersion = 4;
 
   /// Número de versión del esquema sobre el que se ejecutan las migraciones
   /// al abrir la base de datos.
@@ -86,18 +124,4 @@ class AppConstants {
 
   /// Máximo admitido para los umbrales de actividad (10 000 horas).
   static const int maxActivityThresholdMinutes = 600000;
-
-  // --- Modo demostración ---------------------------------------------------
-
-  /// Identificadores reservados y ficticios del modo demostración.
-  ///
-  /// Nunca se envían a Steam: `DemoData` los reconoce y devuelve datos locales.
-  static const List<String> demoSteamId64s = <String>[
-    '90000000000000001',
-    '90000000000000002',
-    '90000000000000003',
-  ];
-
-  /// Marca textual obligatoria en todo contenido de demostración.
-  static const String demoLabel = 'DEMO';
 }

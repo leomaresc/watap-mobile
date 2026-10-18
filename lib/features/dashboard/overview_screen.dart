@@ -33,13 +33,11 @@ class OverviewScreen extends StatelessWidget {
       return EmptyState(
         title: 'Sin integrantes que agregar',
         message: 'La vista general suma la actividad de todos los integrantes '
-            'que añadas. Empieza añadiendo un perfil o activa el modo '
-            'demostración.',
+            'de tu grupo familiar de Steam. Sincroniza la sección Familia para '
+            'cargarlos automáticamente.',
         icon: Icons.bar_chart_outlined,
-        actionLabel: 'Añadir un integrante',
+        actionLabel: 'Ir a Familia',
         onAction: () => controller.setSection(AppSection.members),
-        secondaryLabel: 'Activar modo demostración',
-        onSecondary: controller.enterDemoMode,
       );
     }
 
@@ -163,15 +161,6 @@ class _OverviewSummary extends StatelessWidget {
                 height: 1.4,
               ),
             ),
-            if (controller.showingDemoData) ...<Widget>[
-              const SizedBox(height: 10),
-              const InlineNotice(
-                message: 'Estas cifras agregadas proceden de datos de '
-                    'DEMOSTRACIÓN ficticios.',
-                icon: Icons.science_outlined,
-                color: WatapColors.warning,
-              ),
-            ],
           ],
         ),
       ),

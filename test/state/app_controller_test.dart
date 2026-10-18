@@ -56,41 +56,35 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   initTestDatabaseFactory();
 
-  group('modo demostración', () {
-    test('se activa solo cuando no hay clave ni perfiles', () async {
+  group('configuración inicial', () {
+    test('sin clave ni sesión la app no está lista', () async {
       final TestEnvironment env = await buildTestEnvironment(httpClient: _fake());
       addTearDown(env.dispose);
 
-      expect(env.controller.demoMode, isTrue);
-      expect(env.controller.showingDemoData, isTrue);
-      expect(env.controller.profiles, hasLength(3));
-      expect(env.controller.needsSetup, isFalse);
-      expect(env.controller.totalRecentMinutes, isNotNull);
-    });
-
-    test('con clave configurada no se activa aunque no haya perfiles', () async {
-      final TestEnvironment env =
-          await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
-      addTearDown(env.dispose);
-
-      expect(env.controller.demoMode, isFalse);
-      expect(env.controller.needsSetup, isFalse);
+      expect(env.controller.hasApiKey, isFalse);
+      expect(env.controller.hasSteamSession, isFalse);
+      expect(env.controller.onboardingComplete, isFalse);
       expect(env.controller.profiles, isEmpty);
     });
 
-    test('activar y desactivar la demostración funciona', () async {
-      final TestEnvironment env = await buildTestEnvironment(httpClient: _fake());
+    test('con clave y sesión la app está lista', () async {
+      final TestEnvironment env = await buildTestEnvironment(
+        httpClient: _fake(),
+        apiKey: _key,
+        session: const SteamSession(
+          steamId64: '76561198000000000',
+          accessToken: 'token-de-prueba',
+          refreshToken: 'refresh-de-prueba',
+          accountName: 'cuenta-prueba',
+          savedAtUnix: 1,
+        ),
+      );
       addTearDown(env.dispose);
-      expect(env.controller.demoMode, isTrue);
 
-      await env.controller.exitDemoMode();
-      expect(env.controller.demoMode, isFalse);
-      expect(env.controller.profiles, isEmpty);
-      expect(env.controller.needsSetup, isTrue);
-
-      await env.controller.enterDemoMode();
-      expect(env.controller.demoMode, isTrue);
-      expect(env.controller.profiles, hasLength(3));
+      expect(env.controller.hasApiKey, isTrue);
+      expect(env.controller.hasSteamSession, isTrue);
+      expect(env.controller.onboardingComplete, isTrue);
+      expect(env.controller.steamAccountName, 'cuenta-prueba');
     });
   });
 
@@ -100,45 +94,33 @@ void main() {
           await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
       addTearDown(env.dispose);
 
-      final OperationResult result = await env.controller.addProfileFromInput(_id);
+      final OperationResult result = await env.controller.addRescueProfile(_id);
 
       expect(result.success, isTrue);
       expect(result.steamId64, _id);
-      expect(env.controller.realProfiles, hasLength(1));
-      expect(env.controller.realProfiles.single.personaName, 'Jugador $_id');
+      expect(env.controller.profiles, hasLength(1));
+      expect(env.controller.profiles.single.personaName, 'Jugador $_id');
+      expect(env.controller.profiles.single.isFamilyMember, isFalse);
     });
 
     test('no se puede añadir dos veces el mismo perfil', () async {
       final TestEnvironment env =
           await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
       addTearDown(env.dispose);
-      await env.controller.addProfileFromInput(_id);
+      await env.controller.addRescueProfile(_id);
 
-      final OperationResult result = await env.controller.addProfileFromInput(_id);
+      final OperationResult result = await env.controller.addRescueProfile(_id);
 
       expect(result.success, isFalse);
       expect(result.messageEs, contains('ya está'));
-      expect(env.controller.realProfiles, hasLength(1));
-    });
-
-    test('un identificador reservado para la demostración se rechaza', () async {
-      final TestEnvironment env =
-          await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
-      addTearDown(env.dispose);
-
-      final OperationResult result =
-          await env.controller.addProfileFromInput('90000000000000001');
-
-      expect(result.success, isFalse);
-      expect(result.messageEs, contains('reservado'));
-      expect(env.controller.realProfiles, isEmpty);
+      expect(env.controller.profiles, hasLength(1));
     });
 
     test('resolver un nombre personalizado exige clave de API', () async {
       final TestEnvironment env = await buildTestEnvironment(httpClient: _fake());
       addTearDown(env.dispose);
 
-      final OperationResult result = await env.controller.addProfileFromInput('ana');
+      final OperationResult result = await env.controller.addRescueProfile('ana');
 
       expect(result.success, isFalse);
       expect(result.messageEs, contains('clave'));
@@ -149,10 +131,10 @@ void main() {
           await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
       addTearDown(env.dispose);
 
-      final OperationResult result = await env.controller.addProfileFromInput('ana');
+      final OperationResult result = await env.controller.addRescueProfile('ana');
 
       expect(result.success, isTrue);
-      expect(env.controller.realProfiles.single.steamId64, _id);
+      expect(env.controller.profiles.single.steamId64, _id);
     });
 
     test('un nombre personalizado inexistente devuelve un error claro', () async {
@@ -161,7 +143,7 @@ void main() {
       addTearDown(env.dispose);
 
       final OperationResult result =
-          await env.controller.addProfileFromInput('desconocido');
+          await env.controller.addRescueProfile('desconocido');
 
       expect(result.success, isFalse);
       expect(result.messageEs, contains('No existe'));
@@ -171,12 +153,12 @@ void main() {
       final TestEnvironment env =
           await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
       addTearDown(env.dispose);
-      await env.controller.addProfileFromInput(_id);
+      await env.controller.addRescueProfile(_id);
 
       final OperationResult result = await env.controller.deleteProfile(_id);
 
       expect(result.success, isTrue);
-      expect(env.controller.realProfiles, isEmpty);
+      expect(env.controller.profiles, isEmpty);
     });
   });
 
@@ -214,7 +196,7 @@ void main() {
       final TestEnvironment env =
           await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
       addTearDown(env.dispose);
-      await env.controller.addProfileFromInput(_id);
+      await env.controller.addRescueProfile(_id);
 
       await env.controller.refreshProfile(_id);
 
@@ -229,7 +211,7 @@ void main() {
       final TestEnvironment env =
           await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
       addTearDown(env.dispose);
-      await env.controller.addProfileFromInput(_id);
+      await env.controller.addRescueProfile(_id);
       await env.controller.refreshProfile(_id);
       expect(env.controller.gamesStoredCount, greaterThan(0));
 
@@ -237,7 +219,7 @@ void main() {
 
       expect(result.success, isTrue);
       expect(env.controller.gamesStoredCount, 0);
-      expect(env.controller.realProfiles, hasLength(1));
+      expect(env.controller.profiles, hasLength(1));
     });
 
     test('cambiar de sección se persiste en las preferencias', () async {

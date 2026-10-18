@@ -20,7 +20,6 @@ class CoverWidget extends StatelessWidget {
     this.fallbackUrl,
     this.width = 92,
     this.height = 43,
-    this.isDemo = false,
   });
 
   final String title;
@@ -31,7 +30,6 @@ class CoverWidget extends StatelessWidget {
 
   final double width;
   final double height;
-  final bool isDemo;
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +38,6 @@ class CoverWidget extends StatelessWidget {
       title: title,
       width: width,
       height: height,
-      isDemo: isDemo,
     );
     final String fallback = (fallbackUrl ?? '').trim();
 
@@ -88,17 +85,15 @@ class _CoverPlaceholder extends StatelessWidget {
     required this.title,
     required this.width,
     required this.height,
-    required this.isDemo,
   });
 
   final String title;
   final double width;
   final double height;
-  final bool isDemo;
 
   @override
   Widget build(BuildContext context) {
-    final Color accent = isDemo ? WatapColors.warning : WatapColors.accent;
+    const Color accent = WatapColors.accent;
     return Container(
       width: width,
       height: height,

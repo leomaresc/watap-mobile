@@ -16,14 +16,12 @@ class GameCard extends StatelessWidget {
     required this.game,
     required this.onOpenStore,
     this.showCover = true,
-    this.isDemo = false,
     this.memberName,
   });
 
   final Game game;
   final VoidCallback onOpenStore;
   final bool showCover;
-  final bool isDemo;
 
   /// Nombre del integrante al que pertenece la tarjeta (opcional).
   final String? memberName;
@@ -40,7 +38,6 @@ class GameCard extends StatelessWidget {
               CoverWidget(
                 title: game.label,
                 coverUrl: game.coverUrl,
-                isDemo: isDemo,
               ),
               const SizedBox(width: 12),
             ],
@@ -62,24 +59,7 @@ class GameCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (isDemo)
-                        Container(
-                          margin: const EdgeInsets.only(left: 6, top: 2),
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: WatapColors.warning.withValues(alpha: 0.16),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'DEMO',
-                            style: TextStyle(
-                              color: WatapColors.warning,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
+
                     ],
                   ),
                   if (memberName != null) ...<Widget>[
@@ -190,7 +170,6 @@ class AggregatedGameCard extends StatelessWidget {
                   CoverWidget(
                     title: game.name,
                     coverUrl: game.coverUrl,
-                    isDemo: game.isDemo,
                   ),
                   const SizedBox(width: 12),
                 ],
@@ -211,26 +190,7 @@ class AggregatedGameCard extends StatelessWidget {
                               ),
                             ),
                           ),
-                          if (game.isDemo)
-                            Container(
-                              margin: const EdgeInsets.only(left: 6, top: 2),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 5,
-                                vertical: 1,
-                              ),
-                              decoration: BoxDecoration(
-                                color: WatapColors.warning.withValues(alpha: 0.16),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: const Text(
-                                'DEMO',
-                                style: TextStyle(
-                                  color: WatapColors.warning,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
+
                         ],
                       ),
                       const SizedBox(height: 2),

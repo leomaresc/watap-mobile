@@ -109,7 +109,112 @@ class VanityResolution {
   final String? messageEs;
 }
 
-/// Perfil supervisado manualmente por el usuario.
+/// Sesión de Steam obtenida al iniciar sesión.
+///
+/// Los tokens se guardan **exclusivamente** en el almacenamiento seguro del
+/// dispositivo (nunca en SQLite ni en JSON en claro). El `accessToken` es el que
+/// permite consultar el grupo familiar.
+class SteamSession {
+  const SteamSession({
+    required this.steamId64,
+    required this.accessToken,
+    required this.refreshToken,
+    this.accountName,
+    required this.savedAtUnix,
+  });
+
+  /// Cuenta autenticada. Es también "mi perfil" dentro de la aplicación.
+  final String steamId64;
+
+  final String accessToken;
+  final String refreshToken;
+
+  /// Nombre de la cuenta usado al iniciar sesión (dato público del propio
+  /// usuario; se guarda para mostrarlo en Ajustes).
+  final String? accountName;
+
+  final int savedAtUnix;
+
+  SteamSession copyWith({
+    String? steamId64,
+    String? accessToken,
+    String? refreshToken,
+    String? accountName,
+    int? savedAtUnix,
+  }) {
+    return SteamSession(
+      steamId64: steamId64 ?? this.steamId64,
+      accessToken: accessToken ?? this.accessToken,
+      refreshToken: refreshToken ?? this.refreshToken,
+      accountName: accountName ?? this.accountName,
+      savedAtUnix: savedAtUnix ?? this.savedAtUnix,
+    );
+  }
+
+  @override
+  String toString() => 'SteamSession($steamId64)';
+}
+
+/// Respuesta de `IFamilyGroupsService/GetFamilyGroupForUser`.
+class FamilyGroupForUser {
+  const FamilyGroupForUser({
+    required this.familyGroupId,
+    required this.isNotMemberOfAnyGroup,
+  });
+
+  const FamilyGroupForUser.none()
+      : familyGroupId = null,
+        isNotMemberOfAnyGroup = true;
+
+  final String? familyGroupId;
+  final bool isNotMemberOfAnyGroup;
+
+  /// `true` cuando la cuenta pertenece a algún grupo familiar.
+  bool get hasGroup => !isNotMemberOfAnyGroup && (familyGroupId ?? '').isNotEmpty;
+}
+
+/// Un integrante del grupo familiar.
+class FamilyGroupMember {
+  const FamilyGroupMember({
+    required this.steamId64,
+    this.role,
+    this.timeJoinedUnix,
+  });
+
+  final String steamId64;
+
+  /// Rol dentro del grupo (por ejemplo, 0 = adulto, 1 = menor). Puede faltar.
+  final int? role;
+
+  final int? timeJoinedUnix;
+}
+
+/// Respuesta de `IFamilyGroupsService/GetFamilyGroup`.
+class FamilyGroup {
+  const FamilyGroup({
+    required this.familyGroupId,
+    this.name,
+    this.members = const <FamilyGroupMember>[],
+    this.freeSpots,
+  });
+
+  final String familyGroupId;
+  final String? name;
+  final List<FamilyGroupMember> members;
+  final int? freeSpots;
+
+  List<String> get memberSteamIds =>
+      members.map((FamilyGroupMember m) => m.steamId64).toList(growable: false);
+
+  @override
+  String toString() =>
+      'FamilyGroup($familyGroupId, ${members.length} integrantes)';
+}
+
+/// Perfil supervisado por la aplicación.
+///
+/// Los integrantes se obtienen automáticamente del grupo familiar de Steam. La
+/// vía manual queda solo como rescate para casos excepcionales.
 class Profile {
   const Profile({
     required this.steamId64,
@@ -117,7 +222,7 @@ class Profile {
     this.avatarUrl,
     this.alias,
     this.isOwnProfile = false,
-    this.isDemo = false,
+    this.isFamilyMember = false,
     required this.createdAtUnix,
   });
 
@@ -131,11 +236,11 @@ class Profile {
   /// Nombre local opcional definido por el usuario para distinguir personas.
   final String? alias;
 
-  /// Marcado manual del usuario. No implica autenticación con Steam.
+  /// `true` para la cuenta con la que el usuario ha iniciado sesión en Steam.
   final bool isOwnProfile;
 
-  /// `true` únicamente para los perfiles ficticios del modo demostración.
-  final bool isDemo;
+  /// `true` si el perfil se ha obtenido del grupo familiar de Steam.
+  final bool isFamilyMember;
 
   final int createdAtUnix;
 
@@ -155,7 +260,7 @@ class Profile {
     String? alias,
     bool clearAlias = false,
     bool? isOwnProfile,
-    bool? isDemo,
+    bool? isFamilyMember,
     int? createdAtUnix,
   }) {
     return Profile(
@@ -164,7 +269,7 @@ class Profile {
       avatarUrl: avatarUrl ?? this.avatarUrl,
       alias: clearAlias ? null : (alias ?? this.alias),
       isOwnProfile: isOwnProfile ?? this.isOwnProfile,
-      isDemo: isDemo ?? this.isDemo,
+      isFamilyMember: isFamilyMember ?? this.isFamilyMember,
       createdAtUnix: createdAtUnix ?? this.createdAtUnix,
     );
   }
@@ -175,7 +280,7 @@ class Profile {
         'avatar_url': avatarUrl,
         'alias': alias,
         'is_own_profile': isOwnProfile ? 1 : 0,
-        'is_demo': isDemo ? 1 : 0,
+        'is_family_member': isFamilyMember ? 1 : 0,
         'created_at': createdAtUnix,
       };
 
@@ -185,7 +290,7 @@ class Profile {
         avatarUrl: map['avatar_url'] as String?,
         alias: map['alias'] as String?,
         isOwnProfile: _asBool(map['is_own_profile']),
-        isDemo: _asBool(map['is_demo']),
+        isFamilyMember: _asBool(map['is_family_member']),
         createdAtUnix: _asInt(map['created_at']) ?? 0,
       );
 
@@ -197,7 +302,7 @@ class Profile {
       other.avatarUrl == avatarUrl &&
       other.alias == alias &&
       other.isOwnProfile == isOwnProfile &&
-      other.isDemo == isDemo &&
+      other.isFamilyMember == isFamilyMember &&
       other.createdAtUnix == createdAtUnix;
 
   @override
@@ -207,7 +312,7 @@ class Profile {
         avatarUrl,
         alias,
         isOwnProfile,
-        isDemo,
+        isFamilyMember,
         createdAtUnix,
       );
 
@@ -227,7 +332,6 @@ class Game {
     this.playtimeForever,
     this.coverUrl,
     this.iconUrl,
-    this.isDemo = false,
   });
 
   final int appId;
@@ -248,8 +352,6 @@ class Game {
   /// Icono pequeño del juego (`img_icon_url`), usado como recurso alternativo.
   final String? iconUrl;
 
-  final bool isDemo;
-
   /// `true` cuando Steam ha comunicado el tiempo acumulado.
   bool get hasPlaytimeForever => playtimeForever != null;
 
@@ -268,7 +370,6 @@ class Game {
     bool clearPlaytimeForever = false,
     String? coverUrl,
     String? iconUrl,
-    bool? isDemo,
   }) {
     return Game(
       appId: appId ?? this.appId,
@@ -278,7 +379,6 @@ class Game {
           clearPlaytimeForever ? null : (playtimeForever ?? this.playtimeForever),
       coverUrl: coverUrl ?? this.coverUrl,
       iconUrl: iconUrl ?? this.iconUrl,
-      isDemo: isDemo ?? this.isDemo,
     );
   }
 
@@ -311,8 +411,7 @@ class Game {
       other.playtime2Weeks == playtime2Weeks &&
       other.playtimeForever == playtimeForever &&
       other.coverUrl == coverUrl &&
-      other.iconUrl == iconUrl &&
-      other.isDemo == isDemo;
+      other.iconUrl == iconUrl;
 
   @override
   int get hashCode => Object.hash(
@@ -322,7 +421,6 @@ class Game {
         playtimeForever,
         coverUrl,
         iconUrl,
-        isDemo,
       );
 
   @override
@@ -343,7 +441,6 @@ class ProfileActivity {
     this.lastSuccessAtUnix,
     this.fromCache = false,
     this.isStale = false,
-    this.isDemo = false,
   });
 
   final String steamId64;
@@ -368,8 +465,6 @@ class ProfileActivity {
   /// `true` cuando los datos en caché superan la antigüedad considerada fresca
   /// o cuando el último intento de actualización falló.
   final bool isStale;
-
-  final bool isDemo;
 
   /// Suma de minutos recientes comunicados por Steam.
   ///
@@ -408,7 +503,6 @@ class ProfileActivity {
     int? lastSuccessAtUnix,
     bool? fromCache,
     bool? isStale,
-    bool? isDemo,
   }) {
     return ProfileActivity(
       steamId64: steamId64 ?? this.steamId64,
@@ -422,7 +516,6 @@ class ProfileActivity {
       lastSuccessAtUnix: lastSuccessAtUnix ?? this.lastSuccessAtUnix,
       fromCache: fromCache ?? this.fromCache,
       isStale: isStale ?? this.isStale,
-      isDemo: isDemo ?? this.isDemo,
     );
   }
 
@@ -477,7 +570,6 @@ class Preferences {
     this.refreshOnOpen = true,
     this.openLastViewedSection = true,
     this.lastSection,
-    this.demoModeEnabled = false,
   });
 
   const Preferences.defaults()
@@ -489,8 +581,7 @@ class Preferences {
         lastSelectedProfile = null,
         refreshOnOpen = true,
         openLastViewedSection = true,
-        lastSection = null,
-        demoModeEnabled = false;
+        lastSection = null;
 
   /// Oculta los juegos por debajo de [lowActivityFilterMinutes] en pantalla.
   final bool hideLowActivity;
@@ -518,9 +609,6 @@ class Preferences {
   /// Nombre de la última sección visitada (`AppSection.name`).
   final String? lastSection;
 
-  /// Última elección del usuario respecto al modo demostración.
-  final bool demoModeEnabled;
-
   /// Devuelve unas preferencias coherentes:
   /// `1 <= low <= moderate < high <= máximo`.
   Preferences sanitized() {
@@ -543,7 +631,6 @@ class Preferences {
       refreshOnOpen: refreshOnOpen,
       openLastViewedSection: openLastViewedSection,
       lastSection: lastSection,
-      demoModeEnabled: demoModeEnabled,
     );
   }
 
@@ -558,7 +645,6 @@ class Preferences {
     bool? refreshOnOpen,
     bool? openLastViewedSection,
     String? lastSection,
-    bool? demoModeEnabled,
   }) {
     return Preferences(
       hideLowActivity: hideLowActivity ?? this.hideLowActivity,
@@ -574,7 +660,6 @@ class Preferences {
       refreshOnOpen: refreshOnOpen ?? this.refreshOnOpen,
       openLastViewedSection: openLastViewedSection ?? this.openLastViewedSection,
       lastSection: lastSection ?? this.lastSection,
-      demoModeEnabled: demoModeEnabled ?? this.demoModeEnabled,
     );
   }
 
@@ -590,7 +675,6 @@ class Preferences {
         'refresh_on_open': refreshOnOpen ? '1' : '0',
         'open_last_viewed_section': openLastViewedSection ? '1' : '0',
         'last_section': lastSection ?? '',
-        'demo_mode_enabled': demoModeEnabled ? '1' : '0',
       };
 
   static Preferences fromKeyValueMap(Map<String, String> map) {
@@ -616,15 +700,12 @@ class Preferences {
           ? _asBool(map['open_last_viewed_section'])
           : d.openLastViewedSection,
       lastSection: _emptyToNull(map['last_section']),
-      demoModeEnabled: map.containsKey('demo_mode_enabled')
-          ? _asBool(map['demo_mode_enabled'])
-          : d.demoModeEnabled,
     ).sanitized();
   }
 
   @override
   String toString() => 'Preferences(moderate: $moderateActivityMinutes, '
-      'high: $highActivityMinutes, covers: $showCovers, demo: $demoModeEnabled)';
+      'high: $highActivityMinutes, covers: $showCovers)';
 }
 
 // ---------------------------------------------------------------------------

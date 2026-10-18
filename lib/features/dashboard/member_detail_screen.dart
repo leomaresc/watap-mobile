@@ -42,24 +42,22 @@ class MemberDetailScreen extends StatelessWidget {
           personaName: profile.personaName,
           avatarUrl: profile.avatarUrl,
           status: FetchStatus.notFetched,
-          isDemo: profile.isDemo,
         );
 
     return Scaffold(
       appBar: AppBar(
         title: Text(profile.displayName, overflow: TextOverflow.ellipsis),
         actions: <Widget>[
-          if (!profile.isDemo)
-            IconButton(
-              tooltip: 'Editar integrante',
-              icon: const Icon(Icons.edit_outlined),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (BuildContext _) =>
-                      AddEditProfileScreen(profile: profile),
-                ),
+          IconButton(
+            tooltip: 'Editar integrante',
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (BuildContext _) =>
+                    AddEditProfileScreen(profile: profile),
               ),
             ),
+          ),
         ],
       ),
       body: ListView(
@@ -119,51 +117,34 @@ class MemberDetailScreen extends StatelessWidget {
                 subtitle: const Text(
                   'Consulta los juegos recientes de este integrante',
                 ),
-                enabled: !profile.isDemo,
-                onTap: profile.isDemo
-                    ? null
-                    : () {
-                        controller.refreshProfile(steamId64);
-                        showMessage(
-                          context,
-                          'Actualizando ${profile.displayName}…',
-                        );
-                      },
-              ),
-              if (!profile.isDemo)
-                ListTile(
-                  leading: const Icon(Icons.open_in_new),
-                  title: const Text('Abrir perfil en Steam'),
-                  subtitle: Text(
-                    SteamApiUrls.communityProfile(profile.steamId64).host,
-                  ),
-                  onTap: () => openExternalUrl(
+                onTap: () {
+                  controller.refreshProfile(steamId64);
+                  showMessage(
                     context,
-                    SteamApiUrls.communityProfile(profile.steamId64),
-                    action: 'abrir el perfil de Steam',
-                  ),
+                    'Actualizando ${profile.displayName}…',
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.open_in_new),
+                title: const Text('Abrir perfil en Steam'),
+                subtitle: Text(
+                  SteamApiUrls.communityProfile(profile.steamId64).host,
                 ),
-              if (!profile.isDemo)
-                ListTile(
-                  leading: const Icon(Icons.star_outline),
-                  title: const Text('Marcar como mi perfil'),
-                  subtitle: const Text(
-                    'Necesario para importar amigos. No implica que Steam haya '
-                    'autenticado tu identidad.',
+                onTap: () => openExternalUrl(
+                  context,
+                  SteamApiUrls.communityProfile(profile.steamId64),
+                  action: 'abrir el perfil de Steam',
+                ),
+              ),
+              if (profile.steamId64 == controller.steamId64)
+                const ListTile(
+                  leading: Icon(Icons.verified_outlined),
+                  title: Text('Tu cuenta conectada'),
+                  subtitle: Text(
+                    'Es la cuenta con la que iniciaste sesión en Steam para '
+                    'leer el grupo familiar.',
                   ),
-                  onTap: () async {
-                    await controller.setOwnProfile(
-                      profile.isOwnProfile ? null : profile.steamId64,
-                    );
-                    if (context.mounted) {
-                      showMessage(
-                        context,
-                        profile.isOwnProfile
-                            ? 'Se ha quitado la marca de perfil propio.'
-                            : 'Marcado como tu perfil.',
-                      );
-                    }
-                  },
                 ),
             ],
           ),

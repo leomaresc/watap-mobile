@@ -66,10 +66,6 @@ enum _EndpointPolicy {
   /// `ResolveVanityURL`: la respuesta documenta `success`/`message`; un
   /// 401/403 indica credencial rechazada.
   vanity,
-
-  /// `GetFriendList`: la lista de amigos es privada por defecto, por lo que
-  /// un 401 significa "lista no accesible", no una clave inválida.
-  friends,
 }
 
 /// Respuesta HTTP mínima ya leída.
@@ -190,20 +186,6 @@ class SteamApiClient {
       requiresKey: false,
     );
     return parseVanityResolution(result.body);
-  }
-
-  /// Consulta la lista de amigos del perfil indicado.
-  ///
-  /// Requiere que el usuario use el SteamID64 de su propia cuenta y que la
-  /// lista de amigos sea accesible para la clave configurada.
-  Future<List<String>> fetchFriendList(String steamId64) async {
-    final Uri uri = SteamApiUrls.friendList(steamId64);
-    final _HttpResult result = await _get(
-      uri,
-      policy: _EndpointPolicy.friends,
-      requiresKey: true,
-    );
-    return parseFriendList(result.body);
   }
 
   /// Comprueba la clave configurada usando un perfil conocido por el usuario.
@@ -467,7 +449,6 @@ class SteamApiClient {
               endpoint: endpoint,
             );
           case _EndpointPolicy.recentlyPlayed:
-          case _EndpointPolicy.friends:
             return SteamApiException(
               kind: SteamApiErrorKind.privateOrUnavailable,
               messageEs: defaultSteamErrorMessage(

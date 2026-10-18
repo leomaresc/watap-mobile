@@ -136,7 +136,6 @@ void main() {
           topDisplayName: name,
           topRecentMinutes: recent,
           coverUrl: null,
-          isDemo: false,
         );
 
     test('ordena por reciente, nombre y acumulado', () {

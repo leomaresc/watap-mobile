@@ -39,8 +39,8 @@ class AppBottomNavigation extends StatelessWidget {
         NavigationDestination(
           icon: Icon(Icons.people_outline),
           selectedIcon: Icon(Icons.people),
-          label: 'Integrantes',
-          tooltip: 'Administrar perfiles supervisados',
+          label: 'Familia',
+          tooltip: 'Integrantes del grupo familiar de Steam',
         ),
         NavigationDestination(
           icon: Icon(Icons.settings_outlined),

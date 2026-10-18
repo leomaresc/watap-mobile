@@ -14,13 +14,11 @@ class AvatarWidget extends StatelessWidget {
     required this.displayName,
     this.avatarUrl,
     this.size = 44,
-    this.isDemo = false,
   });
 
   final String displayName;
   final String? avatarUrl;
   final double size;
-  final bool isDemo;
 
   String get _initials {
     final String name = displayName.trim();
@@ -48,7 +46,6 @@ class AvatarWidget extends StatelessWidget {
     final Widget fallback = _InitialsAvatar(
       initials: _initials,
       size: size,
-      isDemo: isDemo,
     );
 
     if (url == null || url.trim().isEmpty || !watapRemoteImagesEnabled) {
@@ -80,16 +77,14 @@ class _InitialsAvatar extends StatelessWidget {
   const _InitialsAvatar({
     required this.initials,
     required this.size,
-    required this.isDemo,
   });
 
   final String initials;
   final double size;
-  final bool isDemo;
 
   @override
   Widget build(BuildContext context) {
-    final Color base = isDemo ? WatapColors.warning : WatapColors.accent;
+    const Color base = WatapColors.accent;
     return Container(
       width: size,
       height: size,

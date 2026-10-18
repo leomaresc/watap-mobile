@@ -27,17 +27,20 @@ void main() {
       expect(bare.displayName, 'Perfil 76561198000000000');
     });
 
-    test('la marca de demostración sobrevive al viaje por mapa', () {
+    test('la marca de integrante del grupo familiar sobrevive al viaje por mapa', () {
       const Profile profile = Profile(
-        steamId64: '90000000000000001',
-        personaName: 'DEMO - Ana',
-        isDemo: true,
+        steamId64: '76561198000000000',
+        personaName: 'Nombre Público',
+        isFamilyMember: true,
+        isOwnProfile: true,
         createdAtUnix: 7,
       );
       final Map<String, Object?> map = profile.toMap();
-      expect(map['is_demo'], 1);
+      expect(map['is_family_member'], 1);
+      expect(map['is_own_profile'], 1);
       final Profile restored = Profile.fromMap(map);
-      expect(restored.isDemo, isTrue);
+      expect(restored.isFamilyMember, isTrue);
+      expect(restored.isOwnProfile, isTrue);
       expect(restored.steamId64, profile.steamId64);
       expect(restored.personaName, profile.personaName);
     });
@@ -135,7 +138,6 @@ void main() {
       expect(defaults.moderateActivityMinutes, 120);
       expect(defaults.highActivityMinutes, 480);
       expect(defaults.lowActivityFilterMinutes, 30);
-      expect(defaults.demoModeEnabled, isFalse);
     });
 
     test('sanitized corrige umbrales invertidos', () {
@@ -165,7 +167,6 @@ void main() {
         highActivityMinutes: 400,
         lastSelectedProfile: '76561198000000000',
         lastSection: 'overview',
-        demoModeEnabled: true,
       );
       final Preferences restored =
           Preferences.fromKeyValueMap(original.toKeyValueMap());
@@ -175,7 +176,6 @@ void main() {
       expect(restored.highActivityMinutes, 400);
       expect(restored.lastSelectedProfile, '76561198000000000');
       expect(restored.lastSection, 'overview');
-      expect(restored.demoModeEnabled, isTrue);
     });
 
     test('un mapa vacío devuelve los valores por defecto', () {

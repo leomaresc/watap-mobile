@@ -236,8 +236,9 @@ void main() {
 
       expect(await _columnsOf(database.raw, Tables.games), contains('icon_url'));
       expect(await _columnsOf(database.raw, Tables.profiles), contains('is_demo'));
-      expect(DatabaseMigrations.steps.keys, containsAll(<int>[2, 3]));
-      expect(DatabaseMigrations.currentVersion, 3);
+      expect(await _columnsOf(database.raw, Tables.profiles), contains('is_family_member'));
+      expect(DatabaseMigrations.steps.keys, containsAll(<int>[2, 3, 4]));
+      expect(DatabaseMigrations.currentVersion, 4);
     });
 
     test('actualizar desde la versión 1 conserva los datos y añade columnas',
@@ -277,11 +278,13 @@ void main() {
       addTearDown(upgraded.close);
 
       expect(await _columnsOf(upgraded, Tables.profiles), contains('is_demo'));
+      expect(await _columnsOf(upgraded, Tables.profiles), contains('is_family_member'));
       expect(await _columnsOf(upgraded, Tables.games), contains('icon_url'));
       final List<Map<String, Object?>> rows = await upgraded.query(Tables.profiles);
       expect(rows, hasLength(1));
       expect(rows.single['persona_name'], 'Antiguo');
       expect(rows.single['is_demo'], 0);
+      expect(rows.single['is_family_member'], 0);
     });
   });
 

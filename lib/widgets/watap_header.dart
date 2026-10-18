@@ -7,7 +7,7 @@ import '../core/constants.dart';
 import '../state/app_controller.dart';
 import '../theme/app_theme.dart';
 
-/// Cabecera compacta con nombre, subtítulo, indicador de demostración,
+/// Cabecera compacta con nombre, contexto de la cuenta conectada,
 /// actualización rápida y aviso de configuración pendiente.
 class WatapHeader extends StatelessWidget implements PreferredSizeWidget {
   const WatapHeader({
@@ -26,8 +26,8 @@ class WatapHeader extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool demo = controller.showingDemoData;
     final bool busy = controller.isRefreshingAll;
+    final String? hint = _contextLine(controller);
 
     return AppBar(
       toolbarHeight: 60,
@@ -58,48 +58,22 @@ class WatapHeader extends StatelessWidget implements PreferredSizeWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Row(
-                  children: <Widget>[
-                    const Text(
-                      AppConstants.appName,
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
-                        color: WatapColors.textPrimary,
-                      ),
-                    ),
-                    if (demo) ...<Widget>[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: WatapColors.warning.withValues(alpha: 0.18),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: WatapColors.warning.withValues(alpha: 0.5),
-                          ),
-                        ),
-                        child: const Text(
-                          AppConstants.demoLabel,
-                          style: TextStyle(
-                            color: WatapColors.warning,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.6,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
+                const Text(
+                  AppConstants.appName,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                    color: WatapColors.textPrimary,
+                  ),
                 ),
                 Text(
-                  controller.setupHint ?? AppConstants.appSubtitle,
+                  hint ?? AppConstants.appSubtitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 11.5,
-                    color: controller.setupHint != null
+                    color: hint != null
                         ? WatapColors.warning
                         : WatapColors.textSecondary,
                   ),
@@ -110,12 +84,10 @@ class WatapHeader extends StatelessWidget implements PreferredSizeWidget {
         ],
       ),
       actions: <Widget>[
-        if (controller.needsSetup)
+        if (!controller.onboardingComplete)
           IconButton(
-            tooltip: controller.setupHint ?? 'Configuración pendiente',
-            onPressed: controller.needsSetup
-                ? () => controller.setSection(AppSection.settings)
-                : null,
+            tooltip: 'Terminar la configuración',
+            onPressed: () => controller.setSection(AppSection.settings),
             icon: const Icon(
               Icons.error_outline,
               color: WatapColors.warning,
@@ -139,5 +111,27 @@ class WatapHeader extends StatelessWidget implements PreferredSizeWidget {
           ),
       ],
     );
+  }
+
+  /// Segunda línea de la cabecera.
+  ///
+  /// Devuelve `null` cuando no hay nada que avisar, en cuyo caso se usa el
+  /// subtítulo habitual de la aplicación.
+  static String? _contextLine(AppController controller) {
+    if (!controller.hasApiKey) return 'Falta la clave de Steam Web API.';
+    if (!controller.hasSteamSession) {
+      return 'Conecta tu cuenta de Steam para leer el grupo familiar.';
+    }
+    final String? group = controller.familyGroupName;
+    if (group != null && group.trim().isNotEmpty) {
+      return 'Grupo familiar: ${group.trim()}';
+    }
+    if (controller.steamAccountName != null) {
+      return 'Conectado como ${controller.steamAccountName}';
+    }
+    if (!controller.hasProfiles) {
+      return 'Sincroniza para cargar los integrantes del grupo familiar.';
+    }
+    return null;
   }
 }

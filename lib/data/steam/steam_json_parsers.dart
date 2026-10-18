@@ -14,6 +14,7 @@ library;
 
 import 'dart:convert';
 
+import '../../core/constants.dart';
 import '../../core/models.dart';
 import 'steam_api_errors.dart';
 import 'steam_api_urls.dart';
@@ -124,10 +125,7 @@ int _minutes(Object? value) {
 }
 
 /// Interpreta `IPlayerService/GetRecentlyPlayedGames/v1`.
-RecentlyPlayedParseResult parseRecentlyPlayedGames(
-  String body, {
-  bool isDemo = false,
-}) {
+RecentlyPlayedParseResult parseRecentlyPlayedGames(String body) {
   final Object? decoded = _decodeJsonObject(body, SteamApiUrls.recentlyPlayed('').path);
   final Map<String, Object?> root = _asStringKeyMap(decoded);
   final Object? responseRaw = root['response'];
@@ -166,7 +164,6 @@ RecentlyPlayedParseResult parseRecentlyPlayedGames(
         iconUrl: iconHash == null
             ? null
             : SteamApiUrls.gameIcon(appId, iconHash).toString(),
-        isDemo: isDemo,
       ),
     );
   }
@@ -240,20 +237,214 @@ VanityResolution parseVanityResolution(String body) {
   return VanityResolution(success: false, messageEs: messageEs);
 }
 
-/// Interpreta `ISteamUser/GetFriendList/v1`.
+/// Interpreta `IFamilyGroupsService/GetFamilyGroupForUser/v1`.
 ///
-/// Un objeto `friendslist` vacío indica que Steam no ha entregado la lista.
-List<String> parseFriendList(String body) {
-  final Object? decoded =
-      _decodeJsonObject(body, SteamApiUrls.friendList('').path);
+/// Solo necesita el `access_token` de la sesión de Steam. Cuando la cuenta no
+/// pertenece a ningún grupo familiar, Steam responde con
+/// `is_not_member_of_any_group: true` y sin `family_groupid`.
+FamilyGroupForUser parseFamilyGroupForUser(String body) {
+  final Object? decoded = _decodeJsonObject(
+    body,
+    AppConstants.steamFamilyGroupForUserPath,
+  );
   final Map<String, Object?> root = _asStringKeyMap(decoded);
-  final Map<String, Object?> friendsList = _asStringKeyMap(root['friendslist']);
+  final Map<String, Object?> response = _asStringKeyMap(root['response']);
 
-  final List<String> ids = <String>[];
-  for (final Object? item in _asList(friendsList['friends'])) {
+  final String? groupId = _asNonEmptyString(response['family_groupid']);
+  final bool notMember = response['is_not_member_of_any_group'] == true;
+
+  if (groupId == null && !notMember) {
+    // Steam devolvió una respuesta que no permite decidir. Se trata como "sin
+    // grupo" para no inventar integrantes, pero se conserva el detalle.
+    return const FamilyGroupForUser.none();
+  }
+  return FamilyGroupForUser(
+    familyGroupId: groupId,
+    isNotMemberOfAnyGroup: notMember || groupId == null,
+  );
+}
+
+/// Interpreta `IFamilyGroupsService/GetFamilyGroup/v1`.
+///
+/// [familyGroupId] se usa solo como respaldo cuando la respuesta no lo incluye,
+/// porque el endpoint no siempre lo repite.
+FamilyGroup parseFamilyGroup(
+  String body, {
+  required String familyGroupId,
+}) {
+  final Object? decoded = _decodeJsonObject(
+    body,
+    AppConstants.steamFamilyGroupPath,
+  );
+  final Map<String, Object?> root = _asStringKeyMap(decoded);
+  final Map<String, Object?> response = _asStringKeyMap(root['response']);
+
+  final List<FamilyGroupMember> members = <FamilyGroupMember>[];
+  final Set<String> seen = <String>{};
+  for (final Object? item in _asList(response['members'])) {
     final Map<String, Object?> map = _asStringKeyMap(item);
     final String? id = _asNonEmptyString(map['steamid']);
-    if (id != null && id.length == 17 && !ids.contains(id)) ids.add(id);
+    if (id == null || id.length != 17) continue;
+    if (!seen.add(id)) continue;
+    members.add(
+      FamilyGroupMember(
+        steamId64: id,
+        role: _asInt(map['role']),
+        timeJoinedUnix: _asInt(map['time_joined']),
+      ),
+    );
   }
-  return ids;
+
+  return FamilyGroup(
+    familyGroupId: familyGroupId,
+    name: _asNonEmptyString(response['name']),
+    members: members,
+    freeSpots: _asInt(response['free_spots']),
+  );
+}
+
+// --- Autenticación (flujo interno del cliente de Steam) ---------------------
+
+/// Respuesta de `IAuthenticationService/GetPasswordRSAPublicKey/v1`.
+class PasswordRsaKeyParse {
+  const PasswordRsaKeyParse({
+    required this.modulusHex,
+    required this.exponentHex,
+    required this.timestamp,
+  });
+
+  final String modulusHex;
+  final String exponentHex;
+  final int timestamp;
+}
+
+/// Interpreta `GetPasswordRSAPublicKey`.
+PasswordRsaKeyParse parsePasswordRsaPublicKey(String body) {
+  final Object? decoded = _decodeJsonObject(body, 'GetPasswordRSAPublicKey');
+  final Map<String, Object?> root = _asStringKeyMap(decoded);
+  final Map<String, Object?> response = _asStringKeyMap(root['response']);
+
+  final String? modulus = _asNonEmptyString(response['publickey_mod']);
+  final String? exponent = _asNonEmptyString(response['publickey_exp']);
+  final int? timestamp = _asInt(response['timestamp']);
+  if (modulus == null || exponent == null || timestamp == null) {
+    throw const SteamApiException(
+      kind: SteamApiErrorKind.malformedResponse,
+      messageEs: 'Steam no entregó la clave pública necesaria para iniciar '
+          'sesión.',
+      endpoint: 'GetPasswordRSAPublicKey',
+    );
+  }
+  return PasswordRsaKeyParse(
+    modulusHex: modulus,
+    exponentHex: exponent,
+    timestamp: timestamp,
+  );
+}
+
+/// Respuesta de `BeginAuthSessionViaCredentials`.
+class BeginAuthSessionParse {
+  const BeginAuthSessionParse({
+    required this.clientId,
+    required this.requestId,
+    this.steamId64,
+    required this.intervalSeconds,
+    this.confirmationTypes = const <int>[],
+    this.confirmationMessage,
+  });
+
+  final String clientId;
+  final String requestId;
+  final String? steamId64;
+  final int intervalSeconds;
+
+  /// Tipos de confirmación admitidos (2 = correo, 3 = código de dispositivo).
+  final List<int> confirmationTypes;
+
+  /// Mensaje que Steam asocia a la confirmación (por ejemplo, el correo al que
+  /// envió el código).
+  final String? confirmationMessage;
+
+  /// `true` cuando hace falta que el usuario escriba un código.
+  bool get needsCode => confirmationTypes.contains(2) ||
+      confirmationTypes.contains(3);
+}
+
+/// Interpreta `BeginAuthSessionViaCredentials`.
+BeginAuthSessionParse parseBeginAuthSession(String body) {
+  final Object? decoded = _decodeJsonObject(body, 'BeginAuthSessionViaCredentials');
+  final Map<String, Object?> root = _asStringKeyMap(decoded);
+  final Map<String, Object?> response = _asStringKeyMap(root['response']);
+
+  final String? clientId = _asNonEmptyString(
+    response['client_id'] ?? response['clientid'],
+  );
+  final String? requestId = _asNonEmptyString(
+    response['request_id'] ?? response['requestid'],
+  );
+  if (clientId == null || requestId == null) {
+    throw const SteamApiException(
+      kind: SteamApiErrorKind.malformedResponse,
+      messageEs: 'Steam no inició la sesión de acceso correctamente.',
+      endpoint: 'BeginAuthSessionViaCredentials',
+    );
+  }
+
+  final List<int> types = <int>[];
+  String? message;
+  for (final Object? item in _asList(response['allowed_confirmations'])) {
+    final Map<String, Object?> map = _asStringKeyMap(item);
+    final int? type = _asInt(map['confirmation_type']);
+    if (type != null) types.add(type);
+    message ??= _asNonEmptyString(map['associated_message']);
+  }
+
+  final int interval = _asInt(response['interval']) ?? 5;
+  return BeginAuthSessionParse(
+    clientId: clientId,
+    requestId: requestId,
+    steamId64: _asNonEmptyString(response['steamid']),
+    intervalSeconds: interval <= 0 ? 5 : interval,
+    confirmationTypes: types,
+    confirmationMessage: message,
+  );
+}
+
+/// Respuesta de `PollAuthSessionStatus`.
+class PollAuthSessionParse {
+  const PollAuthSessionParse({
+    this.accessToken,
+    this.refreshToken,
+    this.accountName,
+  });
+
+  final String? accessToken;
+  final String? refreshToken;
+  final String? accountName;
+
+  /// `true` cuando Steam ya entregó la sesión.
+  bool get isComplete =>
+      (accessToken ?? '').isNotEmpty && (refreshToken ?? '').isNotEmpty;
+}
+
+/// Interpreta `PollAuthSessionStatus`. Un resultado incompleto significa que
+/// Steam todavía no ha confirmado el acceso.
+PollAuthSessionParse parsePollAuthSession(String body) {
+  final Object? decoded = _decodeJsonObject(body, 'PollAuthSessionStatus');
+  final Map<String, Object?> root = _asStringKeyMap(decoded);
+  final Map<String, Object?> response = _asStringKeyMap(root['response']);
+
+  return PollAuthSessionParse(
+    accessToken: _asNonEmptyString(response['access_token']),
+    refreshToken: _asNonEmptyString(response['refresh_token']),
+    accountName: _asNonEmptyString(response['account_name']),
+  );
+}
+
+/// Interpreta `IAuthenticationService/GenerateAccessTokenForApp/v1`.
+String? parseGenerateAccessToken(String body) {
+  final Object? decoded = _decodeJsonObject(body, 'GenerateAccessTokenForApp');
+  final Map<String, Object?> root = _asStringKeyMap(decoded);
+  final Map<String, Object?> response = _asStringKeyMap(root['response']);
+  return _asNonEmptyString(response['access_token']);
 }

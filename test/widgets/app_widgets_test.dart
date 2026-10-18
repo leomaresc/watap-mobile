@@ -1,5 +1,5 @@
-/// Pruebas de widgets: estados vacío, de carga y de error, arranque en modo
-/// demostración y visualización de datos en caché.
+/// Pruebas de widgets: asistente de configuración, estados vacío, de carga y
+/// de error, y visualización de datos en caché.
 ///
 /// Ninguna prueba descarga imágenes ni consulta Steam: las imágenes remotas
 /// están desactivadas y el cliente HTTP es simulado.
@@ -10,12 +10,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:watap_mobile/core/models.dart';
 import 'package:watap_mobile/state/app_controller.dart';
 import 'package:watap_mobile/widgets/error_state.dart';
 import 'package:watap_mobile/widgets/loading_state.dart';
 
 import '../helpers/test_support.dart';
-
 const String _key = 'clave-de-prueba-1234567890abcdef';
 const String _id = '76561198000000000';
 
@@ -52,9 +52,13 @@ http.Response _dispatch(http.Request request) {
 Future<TestEnvironment> _buildEnvironment({
   required FakeHttpClient httpClient,
   String? apiKey,
+  SteamSession? session,
 }) async {
-  final TestEnvironment env =
-      await buildTestEnvironment(httpClient: httpClient, apiKey: apiKey);
+  final TestEnvironment env = await buildTestEnvironment(
+    httpClient: httpClient,
+    apiKey: apiKey,
+    session: session,
+  );
   addTearDown(env.dispose);
   return env;
 }
@@ -91,7 +95,7 @@ void main() {
     expect(retries, 1);
   });
 
-  testWidgets('sin clave ni integrantes la app arranca en modo demostración',
+  testWidgets('sin clave ni sesión se muestra el asistente de configuración',
       (WidgetTester tester) async {
     final FakeHttpClient fake =
         FakeHttpClient((http.Request _) => jsonResponse('{}'));
@@ -100,24 +104,35 @@ void main() {
 
     await pumpWatapApp(tester, env.controller);
 
-    expect(env.controller.demoMode, isTrue);
-    expect(find.textContaining('DEMOSTRACIÓN'), findsWidgets);
-    expect(find.text('DEMO'), findsWidgets);
-    expect(find.text('Dota 2'), findsWidgets);
+    expect(env.controller.onboardingComplete, isFalse);
+    expect(find.text('Configuración inicial'), findsOneWidget);
+    expect(find.text('Clave de Steam Web API'), findsWidgets);
+    expect(find.text('Cuenta de Steam (grupo familiar)'), findsWidgets);
     expect(fake.callCount, 0);
   });
 
-  testWidgets('con clave y sin integrantes se muestra el estado vacío',
+  testWidgets('con clave y sesión sin integrantes se muestra el estado vacío',
       (WidgetTester tester) async {
     final TestEnvironment env = await _buildEnvironment(
       httpClient: FakeHttpClient(_dispatch),
       apiKey: _key,
+      session: const SteamSession(
+        steamId64: '76561198000000000',
+        accessToken: 'token-de-prueba',
+        refreshToken: 'refresh-de-prueba',
+        accountName: 'cuenta-prueba',
+        savedAtUnix: 1,
+      ),
     );
 
     await pumpWatapApp(tester, env.controller);
 
+    await tester.tap(find.text('Familia'));
+    await tester.pumpAndSettle();
+
+    expect(env.controller.onboardingComplete, isTrue);
     expect(find.text('Todavía no hay integrantes'), findsOneWidget);
-    expect(find.text('Añadir un integrante'), findsOneWidget);
+    expect(find.textContaining('Sincronizar'), findsWidgets);
   });
 
   testWidgets('la navegación inferior cambia de sección',
@@ -125,6 +140,13 @@ void main() {
     final TestEnvironment env = await _buildEnvironment(
       httpClient: FakeHttpClient(_dispatch),
       apiKey: _key,
+      session: const SteamSession(
+        steamId64: '76561198000000000',
+        accessToken: 'token-de-prueba',
+        refreshToken: 'refresh-de-prueba',
+        accountName: 'cuenta-prueba',
+        savedAtUnix: 1,
+      ),
     );
     await pumpWatapApp(tester, env.controller);
 
@@ -148,9 +170,16 @@ void main() {
     final TestEnvironment env = await _buildEnvironment(
       httpClient: fake,
       apiKey: _key,
+      session: const SteamSession(
+        steamId64: '76561198000000000',
+        accessToken: 'token-de-prueba',
+        refreshToken: 'refresh-de-prueba',
+        accountName: 'cuenta-prueba',
+        savedAtUnix: 1,
+      ),
     );
 
-    await env.controller.addProfileFromInput(_id);
+    await env.controller.addRescueProfile(_id);
     await env.controller.refreshProfile(_id);
     failing = true;
     await env.controller.refreshProfile(_id);

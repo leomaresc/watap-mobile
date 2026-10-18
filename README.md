@@ -64,15 +64,9 @@ Idioma de la interfaz: **español**.
 
 ## 2. Qué hace
 
-- **Añadir perfiles manualmente** por tres vías:
-  - SteamID64 de 17 dígitos (`7656119…`);
-  - URL completa de perfil (`https://steamcommunity.com/profiles/…` o
-    `https://steamcommunity.com/id/…`);
-  - nombre personalizado de Steam (`vanity`), resuelto con el endpoint
-    documentado `ResolveVanityURL`.
-- **Antes de guardar un perfil**, aplica una **prevención de duplicados** por
-  SteamID64: no se puede añadir dos veces la misma cuenta, aunque se escriba con
-  otro alias.
+- **Cargar automáticamente los integrantes** de tu **grupo familiar de Steam**,
+  sin tener que añadirlos a mano. La aplicación lee el grupo familiar de la
+  cuenta con la que inicias sesión y sincroniza la lista de perfiles.
 - **Consultar la actividad reciente** con `GetRecentlyPlayedGames`: minutos de
   las últimas dos semanas y tiempo acumulado, por juego y por integrante.
 - **Vista "Recientes"**: juegos agrupados por integrante, con búsqueda por juego
@@ -81,14 +75,14 @@ Idioma de la interfaz: **español**.
 - **Vista "General"**: actividad **agregada por AppID** de todos los
   integrantes, con desglose por persona y sumas totales. La agregación se hace
   siempre por **AppID**, nunca por nombre de juego.
-- **Vista "Integrantes"**: alta, edición de alias, marcado de "mi perfil",
-  importación de amigos (si tu lista es accesible) y eliminación.
-- **Vista "Ajustes"**: gestión de la clave de API, umbrales de actividad,
-  preferencias de visualización, caché y pantallas de privacidad y "Acerca de".
+- **Vista "Familia"**: lista de integrantes del grupo familiar, con edición de
+  alias, sincronización manual y opción de rescate para perfiles que no estén
+  en el grupo (caso excepcional).
+- **Vista "Ajustes"**: gestión de la clave de API, sesión de Steam, umbrales de
+  actividad, preferencias de visualización, caché y pantallas de privacidad y
+  "Acerca de".
 - **Caché local**: guarda la última consulta correcta y **la conserva** cuando un
   intento posterior falla, marcándola como procedente de la caché.
-- **Modo demostración** con datos ficticios, marcados como `DEMO`, que funciona
-  **sin conexión** y **sin clave de API**.
 
 ---
 
@@ -98,13 +92,14 @@ Estas ausencias son **decisiones deliberadas**, no funciones pendientes:
 
 - **No** consulta el estado "en línea ahora" ni afirma que alguien esté jugando
   en este momento.
-- **No** usa endpoints privados ni no documentados, ni cookies de sesión, ni
-  `IFamilyGroupsService` (grupos familiares de Steam), ni el inicio de sesión de
-  Steam.
 - **No** hace *scraping* de perfiles de `steamcommunity.com`.
 - **No** lee archivos locales de Steam (por ejemplo, de una instalación de
   Windows), ni registros, ni archivos de configuración del cliente.
-- **No** pide tus credenciales de Steam ni simula un inicio de sesión.
+- **No** simula un inicio de sesión de Steam: el acceso usa el flujo oficial de
+  `IAuthenticationService` que usa el propio cliente de Steam, con la contraseña
+  cifrada con la clave pública de Steam y enviada solo a Steam.
+- **No** almacena tu contraseña de Steam: solo los tokens de sesión (en el
+  almacenamiento seguro del dispositivo).
 - **No** ejecuta procesos en segundo plano ni temporizadores periódicos: todo
   ocurre como operaciones asíncronas mientras la aplicación está abierta.
 - **No** envía telemetría, analíticas ni datos de uso a ningún servidor propio.
@@ -297,21 +292,36 @@ sin una propia. Obtenerla es gratuito:
 
 ---
 
-## 9. Modo demostración
+## 9. Conexión con Steam y grupo familiar
 
-Pensado para **probar la aplicación sin clave y sin conexión**.
+Para leer los integrantes del grupo familiar, WATAP necesita una sesión de
+Steam iniciada una sola vez.
 
-- Se activa **automáticamente** la primera vez, cuando no hay perfiles ni clave
-  configurada. También puede activarse manualmente desde **Ajustes → Modo
-  demostración** o desde el estado vacío de las pantallas Recientes y General.
-- Muestra **3 perfiles ficticios** (Ana, Bruno y Carla) con identificadores
-  **reservados** (`90000000000000001/2/3`) que **nunca** se envían a Steam.
-- Todo el contenido va **marcado como `DEMO`** (perfiles, juegos y avisos), y
-  hay un aviso permanente de que los datos son ficticios.
-- Los **nombres de juego** son reales (para que las portadas del CDN público
-  puedan mostrarse), pero **los tiempos son inventados**.
-- Al añadir tu primer integrante real, la demostración se desactiva sola.
-- La demostración **no borra** tus perfiles ni tu caché reales.
+- **Por qué**: Steam solo entrega la lista de integrantes del grupo familiar a
+  una sesión de Steam autenticada. La clave de Web API no sirve para esto.
+- **Cómo**: al iniciar sesión, WATAP reproduce el mismo flujo que usa el cliente
+  oficial de Steam (`IAuthenticationService`). Tu contraseña se cifra con la
+  clave pública de Steam y se envía **solo a Steam**; nunca se guarda en el
+  dispositivo.
+- **Qué se guarda**: los tokens de sesión (`access_token` y `refresh_token`) en
+  el **almacenamiento seguro** del dispositivo (Keystore en Android, Keychain en
+  iOS), junto con tu SteamID64.
+- **Steam Guard**: si tu cuenta tiene activada la verificación en dos pasos,
+  Steam te pedirá un código o te enviará una confirmación al teléfono. WATAP no
+  puede saltarse ese paso.
+- **Sincronización**: una vez conectado, WATAP consulta tu grupo familiar y
+  carga automáticamente los integrantes. Puedes volver a sincronizar
+  manualmente desde la sección Familia.
+- **Cerrar sesión**: elimina los tokens del dispositivo. Los integrantes
+  guardados se conservan.
+
+### Advertencia sobre endpoints internos
+
+Los endpoints de `IFamilyGroupsService` y `IAuthenticationService` **no están
+en la documentación pública de Valve**. Son los mismos que usa el cliente
+oficial de Steam y pueden cambiar sin aviso. WATAP los interpreta de forma
+defensiva: si Steam cambia el formato de respuesta, la aplicación muestra un
+error claro en lugar de fallar silenciosamente.
 
 ---
 
@@ -323,17 +333,17 @@ La barra de navegación inferior tiene cuatro secciones:
   ordenación y un interruptor para **ocultar juegos con poca actividad**.
 - **General**: juegos **agregados por AppID**, con el desglose por integrante y
   las sumas totales del grupo.
-- **Integrantes**: alta y administración de perfiles. Desde aquí puedes marcar
-  **tu perfil** (necesario para importar amigos) y añadir integrantes por
-  SteamID64, URL o nombre personalizado.
-- **Ajustes**: clave de API, umbrales de actividad, visualización, caché y
-  pantallas de privacidad y "Acerca de".
+- **Familia**: integrantes del grupo familiar de Steam. Desde aquí puedes
+  sincronizar, editar alias, abrir perfiles en Steam y (como excepción) añadir
+  un perfil que no esté en tu grupo familiar.
+- **Ajustes**: clave de API, sesión de Steam, umbrales de actividad,
+  visualización, caché y pantallas de privacidad y "Acerca de".
 
 Acciones habituales:
 
-- **Actualizar todo**: botón de refresco de la cabecera (no disponible en modo
-  demostración, que usa datos locales).
+- **Actualizar todo**: botón de refresco de la cabecera.
 - **Actualizar un integrante**: botón de refresco de su tarjeta.
+- **Sincronizar grupo familiar**: botón en la sección Familia.
 - **Abrir el juego en Steam**: icono de enlace de cada juego (abre la ficha en la
   tienda con la aplicación del sistema).
 - **Borrar caché de actividad**: en Ajustes; elimina los datos de actividad y
@@ -388,15 +398,36 @@ notificaciones.
 
 ## 13. Endpoints de Steam utilizados
 
-Todos son endpoints **públicos y documentados** de la Steam Web API. La clave
-viaja siempre en el encabezado `x-webapi-key`.
+### Endpoints públicos y documentados (Steam Web API)
+
+La clave viaja siempre en el encabezado `x-webapi-key`, nunca en la URL.
 
 | Operación              | Endpoint                                              |
 | ---------------------- | ----------------------------------------------------- |
 | Juegos recientes       | `/IPlayerService/GetRecentlyPlayedGames/v1/`          |
 | Resúmenes de perfiles  | `/ISteamUser/GetPlayerSummaries/v2/`                  |
 | Resolver nombre        | `/ISteamUser/ResolveVanityURL/v1/`                    |
-| Lista de amigos        | `/ISteamUser/GetFriendList/v1/`                       |
+
+### Endpoints internos (no documentados por Valve)
+
+Estos endpoints **no están en la documentación pública de Steam**. Son los
+mismos que usa el cliente oficial de Steam. Todos requieren un `access_token`
+de una sesión de Steam iniciada (no una clave de Web API). El token viaja en el
+cuerpo del `POST`, nunca en la URL.
+
+| Operación              | Endpoint                                              |
+| ---------------------- | ----------------------------------------------------- |
+| Grupo familiar (ID)    | `/IFamilyGroupsService/GetFamilyGroupForUser/v1/`     |
+| Grupo familiar (detalle)| `/IFamilyGroupsService/GetFamilyGroup/v1/`            |
+| Clave pública RSA      | `/IAuthenticationService/GetPasswordRSAPublicKey/v1/` |
+| Inicio de sesión       | `/IAuthenticationService/BeginAuthSessionViaCredentials/v1/` |
+| Código Steam Guard     | `/IAuthenticationService/UpdateAuthSessionWithSteamGuardCode/v1/` |
+| Estado del acceso      | `/IAuthenticationService/PollAuthSessionStatus/v1/`   |
+| Renovar token          | `/IAuthenticationService/GenerateAccessTokenForApp/v1/` |
+
+**Advertencia**: estos endpoints internos pueden cambiar o dejar de funcionar
+sin aviso. WATAP los interpreta de forma defensiva y muestra un error claro si
+Steam cambia el formato de respuesta.
 
 Imágenes (CDN público de Steam):
 

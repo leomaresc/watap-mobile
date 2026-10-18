@@ -5,10 +5,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../services/family_group_sync.dart';
 import '../../state/app_controller.dart';
 import '../../widgets/app_bottom_navigation.dart';
 import '../../widgets/watap_header.dart';
 import '../members/members_screen.dart';
+import '../onboarding/onboarding_screen.dart';
 import '../settings/settings_screen.dart';
 import 'overview_screen.dart';
 import 'recent_games_screen.dart';
@@ -48,8 +50,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     final AppController controller = AppScope.of(context);
     if (controller.initialized &&
         controller.preferences.refreshOnOpen &&
-        controller.hasApiKey &&
-        controller.hasRealProfiles) {
+        controller.onboardingComplete &&
+        controller.hasProfiles) {
       unawaited(controller.refreshAll(silent: true));
     }
   }
@@ -57,6 +59,13 @@ class _DashboardScreenState extends State<DashboardScreen>
   @override
   Widget build(BuildContext context) {
     final AppController controller = AppScope.of(context);
+
+    // Sin clave de API y sin sesión de Steam la aplicación no puede consultar
+    // nada: se muestra el asistente de configuración en lugar del panel.
+    if (!controller.onboardingComplete) {
+      return const OnboardingScreen();
+    }
+
     final AppSection section = controller.section;
 
     return Scaffold(
@@ -84,24 +93,13 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Future<void> _refreshAll(BuildContext context, AppController controller) async {
-    if (controller.profiles.isEmpty) {
-      final String message = controller.showingDemoData
-          ? 'El modo demostración usa datos locales: no se consulta Steam.'
-          : 'Añade al menos un integrante antes de actualizar.';
+    if (!controller.hasProfiles) {
+      final FamilySyncOutcome outcome =
+          await controller.syncFamilyGroup();
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
-      return;
-    }
-    if (controller.showingDemoData) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'El modo demostración usa datos ficticios locales: no se envía '
-            'ninguna solicitud a Steam.',
-          ),
-        ),
-      );
-      return;
+          .showSnackBar(SnackBar(content: Text(outcome.messageEs)));
+      if (!outcome.success) return;
     }
     await controller.refreshAll();
   }

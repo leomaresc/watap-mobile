@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import '../../core/models.dart';
 import '../../data/steam/steam_api_urls.dart';
 import '../../services/activity_aggregator.dart';
-import '../../services/demo_data.dart';
 import '../../state/app_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/empty_state.dart';
@@ -48,16 +47,13 @@ class _RecentGamesScreenState extends State<RecentGamesScreen> {
     if (controller.profiles.isEmpty) {
       return EmptyState(
         title: 'Todavía no hay integrantes',
-        message: 'Añade los perfiles de Steam que quieras supervisar o prueba '
-            'el modo demostración para ver cómo funciona WATAP con datos '
-            'ficticios.',
+        message: 'WATAP carga los integrantes automáticamente desde tu grupo '
+            'familiar de Steam. Ve a la sección Familia y sincroniza.',
         icon: Icons.person_add_alt_1_outlined,
-        actionLabel: 'Añadir un integrante',
+        actionLabel: 'Ir a Familia',
         onAction: () {
           controller.setSection(AppSection.members);
         },
-        secondaryLabel: 'Activar modo demostración',
-        onSecondary: controller.enterDemoMode,
       );
     }
 
@@ -66,17 +62,6 @@ class _RecentGamesScreenState extends State<RecentGamesScreen> {
 
     return Column(
       children: <Widget>[
-        if (controller.showingDemoData)
-          const Padding(
-            padding: EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: InlineNotice(
-              message:
-                  '${DemoData.notice} Los identificadores de estos perfiles '
-                  'nunca se envían a Steam.',
-              icon: Icons.science_outlined,
-              color: WatapColors.warning,
-            ),
-          ),
         _SearchAndFilters(controller: controller, searchController: _searchController),
         Expanded(
           child: RefreshIndicator(

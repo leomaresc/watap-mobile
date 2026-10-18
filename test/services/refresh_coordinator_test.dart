@@ -13,7 +13,6 @@ import 'package:watap_mobile/data/local/app_database.dart';
 import 'package:watap_mobile/data/repositories/activity_repository.dart';
 import 'package:watap_mobile/data/repositories/profiles_repository.dart';
 import 'package:watap_mobile/data/steam/steam_api_client.dart';
-import 'package:watap_mobile/services/demo_data.dart';
 import 'package:watap_mobile/services/refresh_coordinator.dart';
 
 import '../helpers/test_support.dart';
@@ -110,35 +109,11 @@ Future<_Env> _env({
   );
 }
 
-Profile _profile(String id, {bool isDemo = false}) =>
-    Profile(steamId64: id, createdAtUnix: 1, isDemo: isDemo);
+Profile _profile(String id) => Profile(steamId64: id, createdAtUnix: 1);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   initTestDatabaseFactory();
-
-  test('un perfil de demostración nunca consulta Steam', () async {
-    final _Env env = await _env();
-    addTearDown(env.dispose);
-
-    final ProfileActivity result =
-        await env.coordinator.refreshProfile(DemoData.profiles().first);
-
-    expect(result.isDemo, isTrue);
-    expect(result.games, isNotEmpty);
-    expect(env.fake.callCount, 0);
-  });
-
-  test('el identificador reservado basta para no consultar Steam', () async {
-    final _Env env = await _env();
-    addTearDown(env.dispose);
-
-    final ProfileActivity result =
-        await env.coordinator.refreshProfile(_profile('90000000000000001'));
-
-    expect(result.isDemo, isTrue);
-    expect(env.fake.callCount, 0);
-  });
 
   test('sin clave configurada se informa y no se llama a la red', () async {
     final _Env env = await _env(apiKey: null);

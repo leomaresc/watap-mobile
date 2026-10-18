@@ -33,7 +33,6 @@ class MemberContribution {
     required this.displayName,
     required this.recentMinutes,
     required this.foreverMinutes,
-    required this.isDemo,
   });
 
   final String steamId64;
@@ -42,8 +41,6 @@ class MemberContribution {
 
   /// `null` cuando Steam no comunicó el tiempo acumulado.
   final int? foreverMinutes;
-
-  final bool isDemo;
 }
 
 /// Juego agregado a partir de uno o varios integrantes.
@@ -59,7 +56,6 @@ class AggregatedGame {
     required this.topDisplayName,
     required this.topRecentMinutes,
     required this.coverUrl,
-    required this.isDemo,
   });
 
   final int appId;
@@ -84,7 +80,6 @@ class AggregatedGame {
   final int topRecentMinutes;
 
   final String? coverUrl;
-  final bool isDemo;
 
   /// `true` si el acumulado agregado está disponible para todos los integrantes.
   bool get hasCompleteForever => foreverMinutes != null;
@@ -119,7 +114,6 @@ List<AggregatedGame> aggregateByAppId(
   // appId -> nombre y portada conocidos
   final Map<int, String> names = <int, String>{};
   final Map<int, String?> covers = <int, String?>{};
-  final Map<int, bool> demoFlags = <int, bool>{};
 
   for (final ProfileActivity activity in activities) {
     if (include != null && !include(activity)) continue;
@@ -138,7 +132,6 @@ List<AggregatedGame> aggregateByAppId(
               displayName: name,
               recentMinutes: game.playtime2Weeks,
               foreverMinutes: game.playtimeForever,
-              isDemo: game.isDemo || activity.isDemo,
             ),
           );
       final String? gameName = game.name?.trim();
@@ -148,8 +141,6 @@ List<AggregatedGame> aggregateByAppId(
       if (game.coverUrl != null && covers[game.appId] == null) {
         covers[game.appId] = game.coverUrl;
       }
-      demoFlags[game.appId] =
-          (demoFlags[game.appId] ?? false) || game.isDemo || activity.isDemo;
     }
   }
 
@@ -189,7 +180,6 @@ List<AggregatedGame> aggregateByAppId(
         topDisplayName: top.displayName,
         topRecentMinutes: top.recentMinutes,
         coverUrl: covers[entry.key],
-        isDemo: demoFlags[entry.key] ?? false,
       ),
     );
   }

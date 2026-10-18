@@ -1,12 +1,15 @@
-/// Formulario para añadir o editar un integrante.
+/// Formulario para editar un integrante o añadir un perfil de rescate.
+///
+/// El alta normal de integrantes la hace el grupo familiar de Steam de forma
+/// automática; el modo "añadir" existe solo como excepción.
 library;
 
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../core/validators.dart';
 import '../../core/models.dart';
+import '../../core/validators.dart';
 import '../../data/steam/steam_api_urls.dart';
 import '../../state/app_controller.dart';
 import '../../theme/app_theme.dart';
@@ -14,11 +17,11 @@ import '../../widgets/avatar_widget.dart';
 import '../../widgets/loading_state.dart';
 import '../../widgets/ui_helpers.dart';
 
-/// Pantalla de creación y edición de integrantes.
+/// Pantalla de edición y de alta manual de excepción.
 class AddEditProfileScreen extends StatefulWidget {
   const AddEditProfileScreen({super.key, this.profile});
 
-  /// Si es `null`, la pantalla añade un perfil nuevo.
+  /// Si es `null`, la pantalla añade un perfil de rescate.
   final Profile? profile;
 
   @override
@@ -29,7 +32,6 @@ class _AddEditProfileScreenState extends State<AddEditProfileScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   late final TextEditingController _inputController;
   late final TextEditingController _aliasController;
-  late bool _isOwnProfile;
 
   bool _saving = false;
   String? _errorMessage;
@@ -44,7 +46,6 @@ class _AddEditProfileScreenState extends State<AddEditProfileScreen> {
     super.initState();
     _inputController = TextEditingController();
     _aliasController = TextEditingController(text: widget.profile?.alias ?? '');
-    _isOwnProfile = widget.profile?.isOwnProfile ?? false;
     if (!_isEditing) _inputController.addListener(_updateFormatHint);
   }
 
@@ -76,7 +77,7 @@ class _AddEditProfileScreenState extends State<AddEditProfileScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing ? 'Editar integrante' : 'Añadir integrante'),
+        title: Text(_isEditing ? 'Editar integrante' : 'Añadir perfil a mano'),
       ),
       body: Form(
         key: _formKey,
@@ -112,6 +113,19 @@ class _AddEditProfileScreenState extends State<AddEditProfileScreen> {
                             color: WatapColors.textSecondary,
                           ),
                         ),
+                        const SizedBox(height: 6),
+                        Text(
+                          widget.profile!.isFamilyMember
+                              ? 'Integrante del grupo familiar'
+                              : 'Perfil añadido a mano (rescate)',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: widget.profile!.isFamilyMember
+                                ? WatapColors.success
+                                : WatapColors.warning,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -129,23 +143,22 @@ class _AddEditProfileScreenState extends State<AddEditProfileScreen> {
                 ),
                 validator: validateAlias,
               ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Es mi perfil'),
-                subtitle: const Text(
-                  'Se usa para consultar tu lista de amigos al importar. Es una '
-                  'marca manual: WATAP no autentica tu identidad con Steam.',
-                ),
-                value: _isOwnProfile,
-                onChanged: (bool value) => setState(() => _isOwnProfile = value),
-              ),
               const SizedBox(height: 12),
+              if (widget.profile!.isFamilyMember)
+                const InlineNotice(
+                  message: 'Este integrante viene del grupo familiar de Steam. '
+                      'Si lo eliminas, la próxima sincronización lo volverá a '
+                      'añadir.',
+                  icon: Icons.info_outline,
+                ),
             ] else ...<Widget>[
               const InlineNotice(
-                message: 'Puedes pegar el SteamID64 de 17 dígitos, la URL del '
-                    'perfil (steamcommunity.com/profiles/…) o su nombre '
-                    'personalizado. Normalizamos espacios y enlaces antes de '
-                    'procesarlos.',
+                message: 'El alta normal la hace WATAP sola, con los integrantes '
+                    'de tu grupo familiar de Steam. Esto es solo un caso '
+                    'excepcional: añade aquí un perfil que no esté en tu grupo '
+                    'familiar.',
+                icon: Icons.warning_amber_outlined,
+                color: WatapColors.warning,
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -179,7 +192,7 @@ class _AddEditProfileScreenState extends State<AddEditProfileScreen> {
               const SizedBox(height: 10),
               if (!controller.hasApiKey)
                 const InlineNotice(
-                  message: 'Sin clave de Web API solo se puede añadir el perfil: '
+                  message: 'Sin clave de Web API solo se puede guardar el perfil: '
                       'el nombre y la actividad se obtendrán cuando la '
                       'configures en Ajustes.',
                   icon: Icons.key_off_outlined,
@@ -204,7 +217,7 @@ class _AddEditProfileScreenState extends State<AddEditProfileScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : Icon(_isEditing ? Icons.save_outlined : Icons.add),
-              label: Text(_isEditing ? 'Guardar cambios' : 'Añadir integrante'),
+              label: Text(_isEditing ? 'Guardar cambios' : 'Añadir perfil'),
             ),
             if (_saving) ...<Widget>[
               const SizedBox(height: 16),
@@ -268,7 +281,6 @@ class _AddEditProfileScreenState extends State<AddEditProfileScreen> {
       final OperationResult result = await controller.updateProfile(
         steamId64: widget.profile!.steamId64,
         alias: _aliasController.text,
-        isOwnProfile: _isOwnProfile,
       );
       _saving = false;
       if (!mounted) return;
@@ -287,7 +299,7 @@ class _AddEditProfileScreenState extends State<AddEditProfileScreen> {
     _saving = true;
     setState(() {});
     final OperationResult result =
-        await controller.addProfileFromInput(_inputController.text);
+        await controller.addRescueProfile(_inputController.text);
     _saving = false;
     if (!mounted) return;
     setState(() {});

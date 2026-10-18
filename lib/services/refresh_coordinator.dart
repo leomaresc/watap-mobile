@@ -23,7 +23,6 @@ import '../data/repositories/profiles_repository.dart';
 import '../data/steam/steam_api_client.dart';
 import '../data/steam/steam_api_errors.dart';
 import '../data/steam/steam_json_parsers.dart';
-import 'demo_data.dart';
 
 /// Coordinador de actualizaciones de actividad.
 class RefreshCoordinator {
@@ -76,19 +75,6 @@ class RefreshCoordinator {
             steamId64: profile.steamId64,
             personaName: profile.personaName,
             avatarUrl: profile.avatarUrl,
-            status: FetchStatus.notFetched,
-          );
-    }
-
-    // Los perfiles de demostración nunca se consultan en Steam.
-    if (profile.isDemo || DemoData.isDemoSteamId(profile.steamId64)) {
-      final ProfileActivity? demo =
-          DemoData.activityFor(profile.steamId64);
-      if (demo != null) return demo;
-      return previous ??
-          ProfileActivity(
-            steamId64: profile.steamId64,
-            personaName: profile.personaName,
             status: FetchStatus.notFetched,
           );
     }

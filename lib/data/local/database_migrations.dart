@@ -41,6 +41,7 @@ class DatabaseMigrations {
   static Map<int, MigrationStep> get steps => <int, MigrationStep>{
         2: _addGameIconUrl,
         3: _addProfileIsDemo,
+        4: _addProfileIsFamilyMember,
       };
 
   /// Crea el esquema inicial y aplica las migraciones restantes.
@@ -140,11 +141,25 @@ class DatabaseMigrations {
   /// Migración a la versión 3: se marca si un perfil pertenece al modo
   /// demostración.
   ///
-  /// La bandera debe sobrevivir al cierre de la aplicación para que los datos
-  /// ficticios se sigan etiquetando como tales en cada apertura.
+  /// Paso histórico: la columna `is_demo` ya no se escribe, pero se conserva en
+  /// las bases de datos existentes para no reescribir el historial de
+  /// migraciones. Los perfiles nuevos la dejan con su valor por defecto.
   static Future<void> _addProfileIsDemo(DatabaseExecutor db) async {
     await db.execute(
       'ALTER TABLE ${Tables.profiles} ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+
+  /// Migración a la versión 4: se marca si un perfil procede del grupo familiar
+  /// de Steam.
+  ///
+  /// Los integrantes dejan de añadirse a mano: se importan del grupo familiar,
+  /// y esta bandera permite distinguirlos de los perfiles de rescate añadidos
+  /// manualmente y saber cuáles hay que retirar al sincronizar.
+  static Future<void> _addProfileIsFamilyMember(DatabaseExecutor db) async {
+    await db.execute(
+      'ALTER TABLE ${Tables.profiles} '
+      'ADD COLUMN is_family_member INTEGER NOT NULL DEFAULT 0',
     );
   }
 }

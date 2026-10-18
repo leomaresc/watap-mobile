@@ -58,7 +58,6 @@ class MemberActivitySection extends StatelessWidget {
                       AvatarWidget(
                         displayName: displayName,
                         avatarUrl: activity.avatarUrl,
-                        isDemo: activity.isDemo,
                         size: 44,
                       ),
                       const SizedBox(width: 12),
@@ -78,26 +77,7 @@ class MemberActivitySection extends StatelessWidget {
                                     ),
                                   ),
                                 ),
-                                if (activity.isDemo)
-                                  Container(
-                                    margin: const EdgeInsets.only(left: 6),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 5,
-                                      vertical: 1,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: WatapColors.warning.withValues(alpha: 0.16),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: const Text(
-                                      'DEMO',
-                                      style: TextStyle(
-                                        color: WatapColors.warning,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                  ),
+
                               ],
                             ),
                             const SizedBox(height: 3),
@@ -230,7 +210,6 @@ class MemberActivitySection extends StatelessWidget {
               child: GameCard(
                 game: game,
                 showCover: preferences.showCovers,
-                isDemo: activity.isDemo || game.isDemo,
                 onOpenStore: () => onOpenStore(game),
               ),
             ),

@@ -4,6 +4,12 @@
 /// estado) expuesto mediante un `InheritedNotifier`. Toda la lógica de negocio
 /// vive en los servicios y repositorios; este controlador solo los coordina y
 /// mantiene el estado observable por la interfaz.
+///
+/// WATAP necesita **dos** credenciales, y ambas viven fuera de la base de datos:
+/// 1. La clave de Steam Web API (almacenamiento seguro), con la que se consulta
+///    la actividad pública de cada integrante.
+/// 2. La sesión de Steam (`access_token` + `refresh_token`), también en el
+///    almacenamiento seguro, con la que se lee el grupo familiar.
 library;
 
 import 'dart:async';
@@ -16,13 +22,16 @@ import '../core/validators.dart';
 import '../data/local/app_database.dart';
 import '../data/local/image_cache_service.dart';
 import '../data/local/secure_api_key_store.dart';
+import '../data/local/steam_session_store.dart';
 import '../data/repositories/activity_repository.dart';
 import '../data/repositories/preferences_repository.dart';
 import '../data/repositories/profiles_repository.dart';
+import '../data/steam/family_groups_client.dart';
 import '../data/steam/steam_api_client.dart';
 import '../data/steam/steam_api_errors.dart';
+import '../data/steam/steam_auth_client.dart';
 import '../services/activity_aggregator.dart';
-import '../services/demo_data.dart';
+import '../services/family_group_sync.dart';
 import '../services/refresh_coordinator.dart';
 
 /// Secciones de la navegación inferior.
@@ -33,10 +42,10 @@ enum AppSection {
   /// Actividad agregada de todos los integrantes.
   overview,
 
-  /// Administración de perfiles.
+  /// Integrantes del grupo familiar.
   members,
 
-  /// Clave de API, preferencias, caché y privacidad.
+  /// Credenciales, preferencias, caché y privacidad.
   settings;
 
   static AppSection fromName(String? name) {
@@ -49,7 +58,7 @@ enum AppSection {
   String get labelEs => switch (this) {
         AppSection.recent => 'Recientes',
         AppSection.overview => 'General',
-        AppSection.members => 'Integrantes',
+        AppSection.members => 'Familia',
         AppSection.settings => 'Ajustes',
       };
 }
@@ -73,19 +82,23 @@ class OperationResult {
   final String? steamId64;
 }
 
-/// Resultado de intentar cargar la lista de amigos.
-class FriendImportResult {
-  const FriendImportResult({
-    required this.friends,
+/// Resultado del primer paso del inicio de sesión en Steam.
+class SteamLoginStep {
+  const SteamLoginStep({
+    required this.success,
     required this.messageEs,
-    required this.isError,
+    this.challenge,
   });
 
-  final List<SteamPlayerSummary> friends;
+  final bool success;
   final String messageEs;
-  final bool isError;
 
-  bool get isEmpty => friends.isEmpty && !isError;
+  /// Desafío que debe continuar la interfaz (código de Steam Guard o espera de
+  /// confirmación desde el móvil). `null` si no se pudo iniciar el acceso.
+  final SteamLoginChallenge? challenge;
+
+  /// `true` cuando Steam exige que el usuario escriba un código.
+  bool get needsGuardCode => challenge?.needsGuardCode ?? false;
 }
 
 /// Controlador principal de WATAP Mobile.
@@ -96,7 +109,11 @@ class AppController extends ChangeNotifier {
     required ActivityRepository activityRepository,
     required PreferencesRepository preferencesRepository,
     required ApiKeyStore apiKeyStore,
+    required SteamSessionStore sessionStore,
     required SteamApiClient apiClient,
+    required SteamAuthClient authClient,
+    required FamilyGroupsClient familyGroupsClient,
+    required FamilyGroupSyncService familySyncService,
     required RefreshCoordinator refreshCoordinator,
     ImageCacheService? imageCacheService,
   })  : _database = database,
@@ -104,7 +121,11 @@ class AppController extends ChangeNotifier {
         _activityRepo = activityRepository,
         _preferencesRepo = preferencesRepository,
         _keyStore = apiKeyStore,
+        _sessionStore = sessionStore,
         _api = apiClient,
+        _auth = authClient,
+        _groups = familyGroupsClient,
+        _familySync = familySyncService,
         _coordinator = refreshCoordinator,
         _imageCache = imageCacheService ?? ImageCacheService();
 
@@ -113,7 +134,11 @@ class AppController extends ChangeNotifier {
   final ActivityRepository _activityRepo;
   final PreferencesRepository _preferencesRepo;
   final ApiKeyStore _keyStore;
+  final SteamSessionStore _sessionStore;
   final SteamApiClient _api;
+  final SteamAuthClient _auth;
+  final FamilyGroupsClient _groups;
+  final FamilyGroupSyncService _familySync;
   final RefreshCoordinator _coordinator;
   final ImageCacheService _imageCache;
 
@@ -122,10 +147,10 @@ class AppController extends ChangeNotifier {
   bool _initialized = false;
   String? _initializationError;
   bool _hasApiKey = false;
-  bool _demoMode = false;
+  SteamSession? _session;
 
-  List<Profile> _realProfiles = <Profile>[];
-  Map<String, ProfileActivity> _realActivities = <String, ProfileActivity>{};
+  List<Profile> _profilesList = <Profile>[];
+  Map<String, ProfileActivity> _activities = <String, ProfileActivity>{};
   Preferences _preferences = const Preferences.defaults();
 
   AppSection _section = AppSection.recent;
@@ -139,6 +164,10 @@ class AppController extends ChangeNotifier {
   int _imageCacheBytes = 0;
   bool _disposed = false;
 
+  bool _syncingFamily = false;
+  String? _familyGroupName;
+  int? _lastFamilySyncUnix;
+
   // --- Lecturas -------------------------------------------------------------
 
   bool get initialized => _initialized;
@@ -147,10 +176,29 @@ class AppController extends ChangeNotifier {
 
   bool get hasApiKey => _hasApiKey;
 
-  bool get demoMode => _demoMode;
+  /// `true` cuando hay una sesión de Steam guardada.
+  bool get hasSteamSession => _session != null;
 
-  /// `true` cuando los datos mostrados son de demostración.
-  bool get showingDemoData => _demoMode;
+  /// Nombre de la cuenta de Steam conectada, si Steam lo comunicó.
+  String? get steamAccountName => _session?.accountName;
+
+  /// SteamID64 de la cuenta conectada.
+  String? get steamId64 => _session?.steamId64;
+
+  /// `true` cuando la aplicación tiene todo lo necesario para funcionar.
+  ///
+  /// Mientras sea `false`, la interfaz muestra el asistente de configuración en
+  /// lugar del panel principal.
+  bool get onboardingComplete => _hasApiKey && _session != null;
+
+  /// Nombre del grupo familiar, tal como lo devolvió Steam en la última
+  /// sincronización correcta.
+  String? get familyGroupName => _familyGroupName;
+
+  /// Marca de tiempo (segundos) de la última sincronización correcta.
+  int? get lastFamilySyncUnix => _lastFamilySyncUnix;
+
+  bool get isSyncingFamily => _syncingFamily;
 
   Preferences get preferences => _preferences;
 
@@ -171,26 +219,37 @@ class AppController extends ChangeNotifier {
   String get imageCacheSizeLabel => ImageCacheService.formatBytes(_imageCacheBytes);
 
   int get gamesStoredCount =>
-      _realActivities.values.fold<int>(0, (int sum, ProfileActivity a) => sum + a.games.length);
+      _activities.values.fold<int>(0, (int sum, ProfileActivity a) => sum + a.games.length);
 
-  /// Perfiles visibles ahora mismo (reales o de demostración).
-  List<Profile> get profiles =>
-      _demoMode ? DemoData.profiles() : List<Profile>.unmodifiable(_realProfiles);
+  /// Todos los perfiles guardados (integrantes del grupo y perfiles de rescate).
+  List<Profile> get profiles => List<Profile>.unmodifiable(_profilesList);
 
-  /// Perfiles reales guardados en la base de datos.
-  List<Profile> get realProfiles => List<Profile>.unmodifiable(_realProfiles);
+  /// Integrantes obtenidos automáticamente del grupo familiar.
+  List<Profile> get familyMembers => List<Profile>.unmodifiable(
+        _profilesList.where((Profile p) => p.isFamilyMember),
+      );
 
-  bool get hasRealProfiles => _realProfiles.isNotEmpty;
+  /// Perfiles añadidos a mano como excepción.
+  List<Profile> get rescueProfiles => List<Profile>.unmodifiable(
+        _profilesList.where((Profile p) => !p.isFamilyMember),
+      );
 
+  bool get hasProfiles => _profilesList.isNotEmpty;
+
+  /// Cuenta conectada, si está entre los integrantes.
   Profile? get ownProfile {
-    for (final Profile p in _realProfiles) {
+    final String? id = _session?.steamId64;
+    for (final Profile p in _profilesList) {
+      if (id != null && p.steamId64 == id) return p;
+    }
+    for (final Profile p in _profilesList) {
       if (p.isOwnProfile) return p;
     }
     return null;
   }
 
   Profile? profileById(String steamId64) {
-    for (final Profile p in profiles) {
+    for (final Profile p in _profilesList) {
       if (p.steamId64 == steamId64) return p;
     }
     return null;
@@ -198,39 +257,33 @@ class AppController extends ChangeNotifier {
 
   /// Mapa de nombres a mostrar, usado por la agregación.
   Map<String, String> get displayNames => <String, String>{
-        for (final Profile p in profiles) p.steamId64: p.displayName,
+        for (final Profile p in _profilesList) p.steamId64: p.displayName,
       };
 
-  /// Actividad de un perfil (real o de demostración).
-  ProfileActivity? activityFor(String steamId64) {
-    if (_demoMode) return DemoData.activityFor(steamId64);
-    return _realActivities[steamId64];
-  }
+  ProfileActivity? activityFor(String steamId64) => _activities[steamId64];
 
   /// Actividades en el orden de la lista de perfiles.
   List<ProfileActivity> get allActivities {
     final List<ProfileActivity> result = <ProfileActivity>[];
-    for (final Profile profile in profiles) {
+    for (final Profile profile in _profilesList) {
       result.add(_decoratedActivity(profile));
     }
     return result;
   }
 
   ProfileActivity _decoratedActivity(Profile profile) {
-    final ProfileActivity? stored = activityFor(profile.steamId64);
+    final ProfileActivity? stored = _activities[profile.steamId64];
     if (stored == null) {
       return ProfileActivity(
         steamId64: profile.steamId64,
         personaName: profile.personaName,
         avatarUrl: profile.avatarUrl,
         status: FetchStatus.notFetched,
-        isDemo: profile.isDemo,
       );
     }
     return stored.copyWith(
       personaName: stored.personaName ?? profile.personaName,
       avatarUrl: stored.avatarUrl ?? profile.avatarUrl,
-      isDemo: stored.isDemo || profile.isDemo,
     );
   }
 
@@ -283,51 +336,32 @@ class AppController extends ChangeNotifier {
   /// Juegos distintos entre todos los perfiles visibles.
   int get distinctGames => distinctGameCount(allActivities);
 
-  /// `true` si procede mostrar el aviso de configuración pendiente.
-  bool get needsSetup => !_hasApiKey && !_demoMode;
-
-  /// Mensaje de la cabecera cuando falta configuración.
-  String? get setupHint {
-    if (_demoMode) return null;
-    if (!_hasApiKey && _realProfiles.isEmpty) {
-      return 'Añade integrantes o configura tu clave de Steam Web API.';
-    }
-    if (!_hasApiKey) return 'Falta la clave de Steam Web API.';
-    if (_realProfiles.isEmpty) return 'Añade al menos un integrante.';
-    return null;
-  }
-
   // --- Inicialización -------------------------------------------------------
 
-  /// Carga preferencias, clave y datos guardados.
+  /// Carga preferencias, credenciales y datos guardados.
   Future<void> initialize() async {
     try {
       _preferences = await _preferencesRepo.load();
       _hasApiKey = await _keyStore.hasApiKey();
       _api.setApiKey(_hasApiKey ? await _keyStore.loadApiKey() : null);
-      _realProfiles = await _profiles.loadAll();
-      _realActivities = await _activityRepo.loadAll();
+      _session = await _sessionStore.load();
+      _profilesList = await _profiles.loadAll();
+      _activities = await _activityRepo.loadAll();
       _section = _preferences.openLastViewedSection
           ? AppSection.fromName(_preferences.lastSection)
           : AppSection.recent;
-
-      // Modo demostración: cuando no hay perfiles ni clave, o cuando el usuario
-      // lo dejó activado.
-      _demoMode = _preferences.demoModeEnabled ||
-          (_realProfiles.isEmpty && !_hasApiKey);
 
       _initialized = true;
       _initializationError = null;
     } catch (e) {
       _initialized = true;
-      _initializationError =
-          'No se pudo preparar el almacenamiento local: $e';
+      _initializationError = 'No se pudo preparar el almacenamiento local: $e';
     }
     _notify();
 
     if (_initializationError == null) {
       unawaited(_loadImageCacheSize());
-      if (_preferences.refreshOnOpen && !_demoMode && _hasApiKey && _realProfiles.isNotEmpty) {
+      if (_preferences.refreshOnOpen && onboardingComplete && hasProfiles) {
         unawaited(refreshAll(silent: true));
       }
     }
@@ -364,31 +398,162 @@ class AppController extends ChangeNotifier {
     _notify();
   }
 
-  // --- Modo demostración ----------------------------------------------------
+  // --- Sesión de Steam ------------------------------------------------------
 
-  Future<void> enterDemoMode() async {
-    if (_demoMode) return;
-    _demoMode = true;
-    _preferences = _preferences.copyWith(demoModeEnabled: true);
-    await _preferencesRepo.save(_preferences);
-    _notify();
+  /// Primer paso del acceso: valida cuenta y contraseña contra Steam.
+  ///
+  /// La contraseña se cifra con la clave pública de Steam y no se guarda.
+  Future<SteamLoginStep> beginSteamLogin({
+    required String accountName,
+    required String password,
+  }) async {
+    try {
+      final SteamLoginChallenge challenge = await _auth.beginLogin(
+        accountName: accountName,
+        password: password,
+      );
+      return SteamLoginStep(
+        success: true,
+        messageEs: challenge.needsGuardCode
+            ? 'Steam ha pedido un código de Steam Guard para esta cuenta.'
+            : 'Steam ha enviado una confirmación. Acéptala en tu teléfono con '
+                'la aplicación de Steam.',
+        challenge: challenge,
+      );
+    } on SteamApiException catch (e) {
+      return SteamLoginStep(success: false, messageEs: e.messageEs);
+    } catch (e) {
+      return const SteamLoginStep(
+        success: false,
+        messageEs: 'No se pudo iniciar sesión en Steam.',
+      );
+    }
   }
 
-  Future<void> exitDemoMode() async {
-    if (!_demoMode) return;
-    _demoMode = false;
-    _preferences = _preferences.copyWith(demoModeEnabled: false);
-    await _preferencesRepo.save(_preferences);
+  /// Envía el código de Steam Guard y completa el acceso.
+  Future<OperationResult> submitSteamGuardCode({
+    required SteamLoginChallenge challenge,
+    required String code,
+  }) async {
+    try {
+      final SteamSession session = await _auth.submitGuardCode(
+        challenge: challenge,
+        code: code,
+      );
+      return await _activateSession(session);
+    } on SteamApiException catch (e) {
+      return OperationResult.error(e.messageEs);
+    } catch (e) {
+      return const OperationResult.error(
+        'No se pudo completar el acceso con Steam.',
+      );
+    }
+  }
+
+  /// Espera a que el usuario confirme el acceso desde su teléfono.
+  Future<OperationResult> waitForSteamConfirmation(
+    SteamLoginChallenge challenge,
+  ) async {
+    try {
+      final SteamSession session = await _auth.pollStatus(challenge);
+      return await _activateSession(session);
+    } on SteamApiException catch (e) {
+      return OperationResult.error(e.messageEs);
+    } catch (e) {
+      return const OperationResult.error(
+        'No se pudo confirmar el acceso con Steam.',
+      );
+    }
+  }
+
+  /// Guarda la sesión y sincroniza el grupo familiar.
+  Future<OperationResult> _activateSession(SteamSession session) async {
+    await _sessionStore.save(session);
+    _session = session;
     _notify();
+
+    final FamilySyncOutcome outcome = await syncFamilyGroup(silent: true);
+    if (outcome.success) {
+      return OperationResult.ok(outcome.messageEs);
+    }
+    return OperationResult(
+      success: true,
+      messageEs: 'Sesión de Steam iniciada como '
+          '${session.accountName ?? session.steamId64}. '
+          '${outcome.messageEs}',
+    );
+  }
+
+  /// Cierra la sesión de Steam y borra los tokens del dispositivo.
+  Future<OperationResult> logoutSteam() async {
+    await _sessionStore.clear();
+    _session = null;
+    _familyGroupName = null;
+    _lastFamilySyncUnix = null;
+    _notify();
+    return const OperationResult.ok(
+      'Sesión de Steam cerrada y tokens eliminados del dispositivo.',
+    );
+  }
+
+  // --- Grupo familiar -------------------------------------------------------
+
+  /// Sincroniza la lista de integrantes con el grupo familiar de Steam.
+  ///
+  /// Si el token de acceso ha caducado, intenta renovarlo con el
+  /// `refresh_token` antes de darse por vencida.
+  Future<FamilySyncOutcome> syncFamilyGroup({bool silent = false}) async {
+    final SteamSession? session = _session;
+    if (session == null) {
+      return const FamilySyncOutcome.failure(
+        'Conecta tu cuenta de Steam para leer el grupo familiar.',
+        requiresLogin: true,
+      );
+    }
+    if (_syncingFamily) {
+      return const FamilySyncOutcome.failure(
+        'Ya hay una sincronización del grupo familiar en curso.',
+      );
+    }
+
+    _syncingFamily = true;
+    if (!silent) _notify();
+    try {
+      FamilySyncOutcome outcome = await _familySync.sync(session);
+
+      if (!outcome.success && outcome.requiresLogin) {
+        // Un intento de renovación silenciosa antes de pedir la contraseña otra
+        // vez.
+        try {
+          final SteamSession renewed = await _auth.refreshSession(session);
+          await _sessionStore.save(renewed);
+          _session = renewed;
+          outcome = await _familySync.sync(renewed);
+        } catch (_) {
+          // Se conserva el error original, que ya explica qué hacer.
+        }
+      }
+
+      if (outcome.success) {
+        _familyGroupName = outcome.groupName ?? _familyGroupName;
+        _lastFamilySyncUnix = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        _profilesList = await _profiles.loadAll();
+      }
+      return outcome;
+    } finally {
+      _syncingFamily = false;
+      _notify();
+    }
   }
 
   // --- Integrantes ----------------------------------------------------------
 
-  /// Añade un integrante a partir de la entrada escrita por el usuario.
+  /// Añade un integrante a mano como **excepción**.
   ///
-  /// Admite SteamID64, URL de perfil, URL de nombre personalizado y nombre
-  /// personalizado resoluble mediante el endpoint documentado.
-  Future<OperationResult> addProfileFromInput(String raw) async {
+  /// El flujo normal es el grupo familiar automático; esta vía existe solo para
+  /// perfiles que no pertenecen al grupo (o para no quedarse sin nada si Steam
+  /// no entrega el grupo).
+  Future<OperationResult> addRescueProfile(String raw) async {
     final ProfileInputResult parsed = parseProfileInput(raw);
     if (!parsed.isValid) {
       return OperationResult.error(parsed.errorEs ?? 'Entrada no válida.');
@@ -407,7 +572,8 @@ class AppController extends ChangeNotifier {
         );
       }
       try {
-        final VanityResolution resolution = await _api.resolveVanityUrl(input.value);
+        final VanityResolution resolution =
+            await _api.resolveVanityUrl(input.value);
         if (!resolution.success || resolution.steamId64 == null) {
           return OperationResult.error(
             resolution.messageEs ?? 'No se pudo resolver ese nombre personalizado.',
@@ -417,13 +583,6 @@ class AppController extends ChangeNotifier {
       } on SteamApiException catch (e) {
         return OperationResult.error(e.messageEs);
       }
-    }
-
-    if (DemoData.isDemoSteamId(steamId64) || DemoData.looksLikeDemo(steamId64)) {
-      return const OperationResult.error(
-        'Ese identificador está reservado para el modo demostración. Usa el '
-        'SteamID64 real del perfil.',
-      );
     }
 
     if (await _profiles.exists(steamId64)) {
@@ -453,36 +612,26 @@ class AppController extends ChangeNotifier {
       } on SteamApiException catch (e) {
         note = ' No se pudieron obtener el nombre y el avatar (${e.messageEs})';
       }
-    } else {
-      note = ' Añade tu clave de Web API en Ajustes para ver su nombre y avatar '
-          'y consultar su actividad.';
     }
 
-    final Profile profile = Profile(
-      steamId64: steamId64,
-      personaName: personaName,
-      avatarUrl: avatarUrl,
-      createdAtUnix: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    await _profiles.upsert(
+      Profile(
+        steamId64: steamId64,
+        personaName: personaName,
+        avatarUrl: avatarUrl,
+        isFamilyMember: false,
+        createdAtUnix: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      ),
     );
-    await _profiles.upsert(profile);
-    _realProfiles = await _profiles.loadAll();
-
-    if (_demoMode) {
-      // Al añadir datos propios se abandona el modo demostración.
-      _demoMode = false;
-      _preferences = _preferences.copyWith(demoModeEnabled: false);
-      await _preferencesRepo.save(_preferences);
-    }
-
+    _profilesList = await _profiles.loadAll();
     _notify();
-    return OperationResult.ok('Integrante añadido.$note', steamId64: steamId64);
+    return OperationResult.ok('Perfil añadido.$note', steamId64: steamId64);
   }
 
-  /// Guarda los cambios de edición de un perfil (alias y perfil propio).
+  /// Guarda los cambios de edición de un perfil (alias).
   Future<OperationResult> updateProfile({
     required String steamId64,
     String? alias,
-    bool? isOwnProfile,
   }) async {
     final String? aliasError = validateAlias(alias);
     if (aliasError != null) return OperationResult.error(aliasError);
@@ -499,19 +648,19 @@ class AppController extends ChangeNotifier {
         clearAlias: trimmedAlias == null || trimmedAlias.isEmpty,
       ),
     );
-    if (isOwnProfile != null) {
-      await _profiles.setOwnProfile(isOwnProfile ? steamId64 : null);
-    }
-    _realProfiles = await _profiles.loadAll();
+    _profilesList = await _profiles.loadAll();
     _notify();
     return const OperationResult.ok('Integrante actualizado.');
   }
 
   /// Elimina un perfil y su actividad.
+  ///
+  /// Si el perfil vuelve a aparecer en el grupo familiar, la próxima
+  /// sincronización lo traerá de nuevo: es el comportamiento esperado.
   Future<OperationResult> deleteProfile(String steamId64) async {
     await _profiles.delete(steamId64);
-    _realActivities.remove(steamId64);
-    _realProfiles = await _profiles.loadAll();
+    _activities.remove(steamId64);
+    _profilesList = await _profiles.loadAll();
     if (_filterSteamId == steamId64) _filterSteamId = null;
     if (_preferences.lastSelectedProfile == steamId64) {
       _preferences = _preferences.copyWith(clearLastSelectedProfile: true);
@@ -521,23 +670,12 @@ class AppController extends ChangeNotifier {
     return const OperationResult.ok('Integrante eliminado.');
   }
 
-  Future<void> setOwnProfile(String? steamId64) async {
-    await _profiles.setOwnProfile(steamId64);
-    _realProfiles = await _profiles.loadAll();
-    _notify();
-  }
-
   // --- Actualizaciones ------------------------------------------------------
 
   /// Actualiza un perfil concreto sin bloquear la interfaz.
   Future<void> refreshProfile(String steamId64) async {
     final Profile? profile = profileById(steamId64);
     if (profile == null) return;
-    if (profile.isDemo) {
-      // Los datos de demostración son locales: no hay nada que actualizar.
-      _notify();
-      return;
-    }
     if (_refreshing.contains(steamId64)) return;
 
     _refreshing.add(steamId64);
@@ -545,25 +683,22 @@ class AppController extends ChangeNotifier {
     try {
       final ProfileActivity activity = await _coordinator.refreshProfile(
         profile,
-        previous: _realActivities[steamId64],
+        previous: _activities[steamId64],
       );
       if (_disposed) return;
-      _realActivities[steamId64] = activity;
+      _activities[steamId64] = activity;
     } finally {
       _refreshing.remove(steamId64);
       _notify();
     }
   }
 
-  /// Actualiza todos los perfiles reales emitiendo resultados parciales.
+  /// Actualiza todos los perfiles emitiendo resultados parciales.
   Future<void> refreshAll({bool silent = false}) async {
     if (_refreshingAll || _disposed) return;
 
-    final List<Profile> targets =
-        _realProfiles.where((Profile p) => !p.isDemo).toList(growable: false);
+    final List<Profile> targets = List<Profile>.of(_profilesList);
     if (targets.isEmpty) {
-      // No hay perfiles reales: los datos de demostración son locales, así que
-      // no hay nada que actualizar por red.
       if (!silent) _notify();
       return;
     }
@@ -574,7 +709,7 @@ class AppController extends ChangeNotifier {
     final Completer<void> done = Completer<void>();
     final Map<String, ProfileActivity> cached = <String, ProfileActivity>{
       for (final Profile p in targets)
-        if (_realActivities[p.steamId64] != null) p.steamId64: _realActivities[p.steamId64]!,
+        if (_activities[p.steamId64] != null) p.steamId64: _activities[p.steamId64]!,
     };
 
     await _refreshSubscription?.cancel();
@@ -583,7 +718,7 @@ class AppController extends ChangeNotifier {
         .listen(
       (ProfileActivity activity) {
         if (_disposed) return;
-        _realActivities[activity.steamId64] = activity;
+        _activities[activity.steamId64] = activity;
         _notify();
       },
       onError: (Object error) {
@@ -620,10 +755,6 @@ class AppController extends ChangeNotifier {
     await _keyStore.saveApiKey(apiKey);
     _api.setApiKey(await _keyStore.loadApiKey());
     _hasApiKey = await _keyStore.hasApiKey();
-    if (_demoMode && _hasApiKey) {
-      // Al configurar una clave ya no tiene sentido arrancar en demostración.
-      _demoMode = _preferences.demoModeEnabled;
-    }
     _notify();
     return const OperationResult.ok(
       'Clave guardada en el almacenamiento seguro del dispositivo.',
@@ -661,7 +792,7 @@ class AppController extends ChangeNotifier {
   /// Borra la actividad en caché conservando la lista de integrantes.
   Future<OperationResult> clearActivityCache() async {
     await _database.clearUserData(includeProfiles: false);
-    _realActivities = <String, ProfileActivity>{};
+    _activities = <String, ProfileActivity>{};
     _notify();
     return const OperationResult.ok(
       'Caché de actividad borrada. Los integrantes se han conservado.',
@@ -687,90 +818,6 @@ class AppController extends ChangeNotifier {
 
   Future<void> refreshImageCacheSize() => _loadImageCacheSize();
 
-  // --- Importación de amigos ------------------------------------------------
-
-  /// Carga la lista de amigos del perfil propio.
-  Future<FriendImportResult> loadFriends() async {
-    if (!_hasApiKey) {
-      return const FriendImportResult(
-        friends: <SteamPlayerSummary>[],
-        messageEs: 'Necesitas una clave de Steam Web API configurada para '
-            'importar amigos.',
-        isError: true,
-      );
-    }
-    final Profile? own = ownProfile;
-    if (own == null) {
-      return const FriendImportResult(
-        friends: <SteamPlayerSummary>[],
-        messageEs: 'Marca primero tu perfil propio en Integrantes: la API de '
-            'Steam necesita ese SteamID64 para consultar la lista de amigos.',
-        isError: true,
-      );
-    }
-
-    try {
-      final List<String> ids = await _api.fetchFriendList(own.steamId64);
-      if (ids.isEmpty) {
-        return const FriendImportResult(
-          friends: <SteamPlayerSummary>[],
-          messageEs: 'Steam no ha devuelto ningún amigo. Esto ocurre cuando la '
-              'lista de amigos no es pública para la clave configurada.',
-          isError: false,
-        );
-      }
-      final List<SteamPlayerSummary> summaries =
-          await _api.fetchPlayerSummaries(ids);
-      return FriendImportResult(
-        friends: summaries,
-        messageEs: 'Se han encontrado ${summaries.length} amigos.',
-        isError: false,
-      );
-    } on SteamApiException catch (e) {
-      final String extra = e.kind == SteamApiErrorKind.privateOrUnavailable
-          ? ' Si la lista es privada, añade los integrantes manualmente.'
-          : '';
-      return FriendImportResult(
-        friends: const <SteamPlayerSummary>[],
-        messageEs: '${e.messageEs}$extra',
-        isError: true,
-      );
-    }
-  }
-
-  /// Añade los amigos seleccionados, omitiendo los que ya existan.
-  Future<OperationResult> addImportedProfiles(
-    List<SteamPlayerSummary> summaries,
-  ) async {
-    int added = 0;
-    int skipped = 0;
-    final Set<String> existing = _realProfiles.map((Profile p) => p.steamId64).toSet();
-    final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-
-    for (final SteamPlayerSummary summary in summaries) {
-      if (existing.contains(summary.steamId64)) {
-        skipped++;
-        continue;
-      }
-      await _profiles.upsert(
-        Profile(
-          steamId64: summary.steamId64,
-          personaName: summary.personaName,
-          avatarUrl: summary.avatarUrl,
-          createdAtUnix: now + added,
-        ),
-      );
-      existing.add(summary.steamId64);
-      added++;
-    }
-    _realProfiles = await _profiles.loadAll();
-    _notify();
-    return OperationResult.ok(
-      'Se han añadido $added integrantes.'
-      '${skipped > 0 ? ' $skipped ya estaban en la lista.' : ''}',
-    );
-  }
-
   // --- Utilidades -----------------------------------------------------------
 
   void _notify() {
@@ -783,6 +830,8 @@ class AppController extends ChangeNotifier {
     _refreshSubscription?.cancel();
     _coordinator.dispose();
     _api.dispose();
+    _auth.dispose();
+    _groups.dispose();
     unawaited(_database.close());
     super.dispose();
   }
