@@ -18,6 +18,7 @@ import '../helpers/test_support.dart';
 
 const String _key = 'clave-de-prueba-1234567890abcdef';
 const String _id = '76561198000000000';
+const String _token = 'token-de-prueba-123';
 
 const String _recentJson =
     '{"response":{"total_count":1,"games":[{"appid":570,"name":"Dota 2",'
@@ -52,9 +53,13 @@ http.Response _dispatch(http.Request request) {
 Future<TestEnvironment> _buildEnvironment({
   required FakeHttpClient httpClient,
   String? apiKey,
+  String? steamToken,
 }) async {
-  final TestEnvironment env =
-      await buildTestEnvironment(httpClient: httpClient, apiKey: apiKey);
+  final TestEnvironment env = await buildTestEnvironment(
+    httpClient: httpClient,
+    apiKey: apiKey,
+    steamToken: steamToken,
+  );
   addTearDown(env.dispose);
   return env;
 }
@@ -111,6 +116,7 @@ void main() {
     final TestEnvironment env = await _buildEnvironment(
       httpClient: FakeHttpClient(_dispatch),
       apiKey: _key,
+      steamToken: _token,
     );
 
     await pumpWatapApp(tester, env.controller);
@@ -128,6 +134,7 @@ void main() {
     final TestEnvironment env = await _buildEnvironment(
       httpClient: FakeHttpClient(_dispatch),
       apiKey: _key,
+      steamToken: _token,
     );
     await pumpWatapApp(tester, env.controller);
 
@@ -151,6 +158,7 @@ void main() {
     final TestEnvironment env = await _buildEnvironment(
       httpClient: fake,
       apiKey: _key,
+      steamToken: _token,
     );
 
     await env.controller.addProfile(_id);

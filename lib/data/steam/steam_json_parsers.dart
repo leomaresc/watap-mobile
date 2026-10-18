@@ -235,3 +235,59 @@ VanityResolution parseVanityResolution(String body) {
   };
   return VanityResolution(success: false, messageEs: messageEs);
 }
+
+/// Interpreta `IFamilyGroupsService/GetFamilyGroupForUser/v1`.
+///
+/// Devuelve el identificador del grupo familiar de la cuenta autenticada. Si la
+/// cuenta no pertenece a ningún grupo, Steam responde `{"response":{}}` y aquí
+/// se devuelve `familyGroupId == null`.
+FamilyGroupForUser parseFamilyGroupForUser(String body) {
+  final Object? decoded = _decodeJsonObject(
+    body,
+    '/IFamilyGroupsService/GetFamilyGroupForUser/v1/',
+  );
+  final Map<String, Object?> root = _asStringKeyMap(decoded);
+  final Map<String, Object?> response = _asStringKeyMap(root['response']);
+  return FamilyGroupForUser(
+    familyGroupId: _asNonEmptyString(response['family_groupid']),
+  );
+}
+
+/// Interpreta `IFamilyGroupsService/GetFamilyGroup/v1`.
+///
+/// Devuelve el nombre del grupo y su lista de integrantes. Los identificadores
+/// mal formados se descartan y los duplicados se eliminan; si al final no queda
+/// ningún integrante, se considera una respuesta no utilizable.
+FamilyGroup parseFamilyGroup(
+  String body, {
+  required String familyGroupId,
+}) {
+  final Object? decoded = _decodeJsonObject(
+    body,
+    '/IFamilyGroupsService/GetFamilyGroup/v1/',
+  );
+  final Map<String, Object?> root = _asStringKeyMap(decoded);
+  final Map<String, Object?> response = _asStringKeyMap(root['response']);
+
+  final List<FamilyGroupMember> members = <FamilyGroupMember>[];
+  final Set<String> seen = <String>{};
+  for (final Object? item in _asList(response['members'])) {
+    final Map<String, Object?> map = _asStringKeyMap(item);
+    final String? id = _asNonEmptyString(map['steamid']);
+    if (id == null || id.length != 17 || !seen.add(id)) continue;
+    members.add(
+      FamilyGroupMember(
+        steamId64: id,
+        role: _asInt(map['role']),
+        timeJoinedUnix: _asInt(map['time_joined']),
+      ),
+    );
+  }
+
+  return FamilyGroup(
+    familyGroupId: familyGroupId,
+    name: _asNonEmptyString(response['name']),
+    members: members,
+    freeSpots: _asInt(response['free_spots']),
+  );
+}

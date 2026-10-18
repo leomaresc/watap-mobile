@@ -23,6 +23,17 @@ class SteamApiEndpoints {
 
   /// Resolución de un nombre personalizado a SteamID64.
   static const String resolveVanityUrl = '/ISteamUser/ResolveVanityURL/v1/';
+
+  /// Grupo familiar de la cuenta autenticada.
+  ///
+  /// Endpoint **interno** (sin documentación pública de Valve): solo acepta un
+  /// `access_token` de sesión de Steam, nunca una clave de Web API.
+  static const String familyGroupForUser =
+      '/IFamilyGroupsService/GetFamilyGroupForUser/v1/';
+
+  /// Detalle de un grupo familiar (nombre e integrantes).
+  static const String familyGroup =
+      '/IFamilyGroupsService/GetFamilyGroup/v1/';
 }
 
 /// Constructores de URL de la aplicación.
@@ -72,6 +83,16 @@ class SteamApiUrls {
       },
     );
   }
+
+  /// `IFamilyGroupsService/GetFamilyGroupForUser/v1`
+  ///
+  /// El `access_token` **nunca** va en la URL: se envía en el cuerpo del POST.
+  static Uri familyGroupForUser() =>
+      Uri.parse('$_apiBase${SteamApiEndpoints.familyGroupForUser}');
+
+  /// `IFamilyGroupsService/GetFamilyGroup/v1`
+  static Uri familyGroup() =>
+      Uri.parse('$_apiBase${SteamApiEndpoints.familyGroup}');
 
   /// Portada oficial del juego en el CDN público de Steam.
   ///

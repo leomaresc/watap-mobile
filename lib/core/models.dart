@@ -109,17 +109,68 @@ class VanityResolution {
   final String? messageEs;
 }
 
+/// Respuesta de `IFamilyGroupsService/GetFamilyGroupForUser`.
+///
+/// Con los tokens de acceso de la sesión de Steam (jamás con la clave de Web
+/// API). Si la cuenta no pertenece a ningún grupo, Steam responde sin
+/// `family_groupid`.
+class FamilyGroupForUser {
+  const FamilyGroupForUser({required this.familyGroupId});
+
+  /// `null` cuando la cuenta no pertenece a ningún grupo familiar.
+  final String? familyGroupId;
+
+  /// `true` cuando sí hay grupo.
+  bool get hasGroup => (familyGroupId ?? '').isNotEmpty;
+}
+
+/// Un integrante del grupo familiar.
+class FamilyGroupMember {
+  const FamilyGroupMember({
+    required this.steamId64,
+    this.role,
+    this.timeJoinedUnix,
+  });
+
+  final String steamId64;
+
+  /// Rol dentro del grupo (por ejemplo, 0 = adulto, 1 = menor). Puede faltar.
+  final int? role;
+
+  final int? timeJoinedUnix;
+}
+
+/// Respuesta de `IFamilyGroupsService/GetFamilyGroup`.
+class FamilyGroup {
+  const FamilyGroup({
+    required this.familyGroupId,
+    this.name,
+    this.members = const <FamilyGroupMember>[],
+    this.freeSpots,
+  });
+
+  final String familyGroupId;
+  final String? name;
+  final List<FamilyGroupMember> members;
+  final int? freeSpots;
+
+  List<String> get memberSteamIds =>
+      members.map((FamilyGroupMember m) => m.steamId64).toList(growable: false);
+
+  @override
+  String toString() => 'FamilyGroup($familyGroupId, ${members.length} miembros)';
+}
+
 /// Perfil supervisado por la aplicación.
 ///
 /// Los integrantes se obtienen automáticamente del grupo familiar de Steam. La
-/// vía manual queda solo como rescate para casos excepcionales.
+/// vía manual queda solo como respaldo para casos excepcionales.
 class Profile {
   const Profile({
     required this.steamId64,
     this.personaName,
     this.avatarUrl,
     this.alias,
-
     this.isFamilyMember = false,
     required this.createdAtUnix,
   });
@@ -133,9 +184,6 @@ class Profile {
 
   /// Nombre local opcional definido por el usuario para distinguir personas.
   final String? alias;
-
-
-
 
   /// `true` si el perfil se ha obtenido del grupo familiar de Steam.
   final bool isFamilyMember;
@@ -468,6 +516,7 @@ class Preferences {
     this.refreshOnOpen = true,
     this.openLastViewedSection = true,
     this.lastSection,
+    this.familySetupDone = false,
   });
 
   const Preferences.defaults()
@@ -479,7 +528,8 @@ class Preferences {
         lastSelectedProfile = null,
         refreshOnOpen = true,
         openLastViewedSection = true,
-        lastSection = null;
+        lastSection = null,
+        familySetupDone = false;
 
   /// Oculta los juegos por debajo de [lowActivityFilterMinutes] en pantalla.
   final bool hideLowActivity;
@@ -507,6 +557,13 @@ class Preferences {
   /// Nombre de la última sección visitada (`AppSection.name`).
   final String? lastSection;
 
+  /// `true` cuando el asistente de configuración del grupo familiar ya se
+  /// completó (conexión con Steam realizada u omitida explícitamente).
+  ///
+  /// Sirve para no bloquear la aplicación si la conexión con Steam no funciona.
+  /// Permite volver a conectarse más tarde desde Integrantes o Ajustes.
+  final bool familySetupDone;
+
   /// Devuelve unas preferencias coherentes:
   /// `1 <= low <= moderate < high <= máximo`.
   Preferences sanitized() {
@@ -529,6 +586,7 @@ class Preferences {
       refreshOnOpen: refreshOnOpen,
       openLastViewedSection: openLastViewedSection,
       lastSection: lastSection,
+      familySetupDone: familySetupDone,
     );
   }
 
@@ -543,6 +601,7 @@ class Preferences {
     bool? refreshOnOpen,
     bool? openLastViewedSection,
     String? lastSection,
+    bool? familySetupDone,
   }) {
     return Preferences(
       hideLowActivity: hideLowActivity ?? this.hideLowActivity,
@@ -558,6 +617,7 @@ class Preferences {
       refreshOnOpen: refreshOnOpen ?? this.refreshOnOpen,
       openLastViewedSection: openLastViewedSection ?? this.openLastViewedSection,
       lastSection: lastSection ?? this.lastSection,
+      familySetupDone: familySetupDone ?? this.familySetupDone,
     );
   }
 
@@ -573,6 +633,7 @@ class Preferences {
         'refresh_on_open': refreshOnOpen ? '1' : '0',
         'open_last_viewed_section': openLastViewedSection ? '1' : '0',
         'last_section': lastSection ?? '',
+        'family_setup_done': familySetupDone ? '1' : '0',
       };
 
   static Preferences fromKeyValueMap(Map<String, String> map) {
@@ -598,6 +659,9 @@ class Preferences {
           ? _asBool(map['open_last_viewed_section'])
           : d.openLastViewedSection,
       lastSection: _emptyToNull(map['last_section']),
+      familySetupDone: map.containsKey('family_setup_done')
+          ? _asBool(map['family_setup_done'])
+          : d.familySetupDone,
     ).sanitized();
   }
 

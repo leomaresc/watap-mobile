@@ -8,10 +8,12 @@ import '../../core/constants.dart';
 import '../../core/models.dart';
 import '../../core/validators.dart';
 import '../../data/steam/steam_api_client.dart';
+import '../../services/family_group_sync.dart';
 import '../../state/app_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/ui_helpers.dart';
 import '../about/about_screen.dart';
+import '../onboarding/steam_connect_screen.dart';
 import 'api_key_screen.dart';
 import 'privacy_screen.dart';
 
@@ -27,6 +29,85 @@ class SettingsScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 28),
       children: <Widget>[
+        SectionCard(
+          title: 'GRUPO FAMILIAR',
+          subtitle: 'Se leen los integrantes de tu familia en Steam para '
+              'añadirlos automáticamente',
+          children: <Widget>[
+            ListTile(
+              leading: Icon(
+                controller.hasFamilyToken ? Icons.link : Icons.link_off,
+                color: controller.hasFamilyToken
+                    ? WatapColors.success
+                    : WatapColors.warning,
+              ),
+              title: Text(
+                controller.hasFamilyToken
+                    ? 'Conectado con Steam'
+                    : 'Sin conexión con Steam',
+              ),
+              subtitle: Text(
+                controller.hasFamilyToken
+                    ? 'WATAP usa un token temporal guardado en el almacén '
+                        'seguro. Tu contraseña nunca se guarda.'
+                    : 'Conecta tu cuenta para importar los integrantes del '
+                        'grupo familiar automáticamente.',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (BuildContext _) => const SteamConnectScreen(),
+                ),
+              ),
+            ),
+            if (controller.hasFamilyToken) ...<Widget>[
+              ListTile(
+                leading: const Icon(Icons.sync),
+                title: const Text('Sincronizar ahora'),
+                subtitle: Text(
+                  '${controller.familyMembers.length} integrantes · última '
+                  'sincronización: '
+                  '${_lastSyncLabel(controller.lastFamilySyncUnix)}',
+                ),
+                enabled: !controller.isSyncingFamily,
+                onTap: controller.isSyncingFamily
+                    ? null
+                    : () async {
+                        final FamilySyncOutcome outcome =
+                            await controller.syncFamilyGroup();
+                        if (!context.mounted) return;
+                        showMessage(
+                          context,
+                          outcome.messageEs,
+                          isError: !outcome.success,
+                        );
+                      },
+              ),
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text('Desconectar Steam'),
+                subtitle: const Text(
+                  'Borra el token del dispositivo. Los integrantes guardados se '
+                  'conservan.',
+                ),
+                onTap: () async {
+                  final bool confirmed = await confirmAction(
+                    context,
+                    title: 'Desconectar Steam',
+                    message: 'Se eliminará el token guardado. Para volver a '
+                        'sincronizar el grupo familiar tendrás que conectar tu '
+                        'cuenta otra vez.',
+                  );
+                  if (!confirmed || !context.mounted) return;
+                  final OperationResult result = await controller.disconnectSteam();
+                  if (!context.mounted) return;
+                  showMessage(context, result.messageEs, isError: !result.success);
+                },
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 16),
         SectionCard(
           title: 'STEAM WEB API',
           subtitle: 'La clave se guarda solo en el almacenamiento seguro del '
@@ -236,6 +317,16 @@ class SettingsScreen extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  static String _lastSyncLabel(int? unix) {
+    if (unix == null) return 'nunca';
+    final DateTime dt = DateTime.fromMillisecondsSinceEpoch(unix * 1000);
+    final Duration diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'ahora mismo';
+    if (diff.inMinutes < 60) return 'hace ${diff.inMinutes} min';
+    if (diff.inHours < 24) return 'hace ${diff.inHours} h';
+    return 'hace ${diff.inDays} d';
   }
 
   /// Diálogo de edición de los tres umbrales de actividad.

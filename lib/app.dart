@@ -7,11 +7,14 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/constants.dart';
 import 'data/local/app_database.dart';
 import 'data/local/secure_api_key_store.dart';
+import 'data/local/steam_token_store.dart';
 import 'data/repositories/activity_repository.dart';
 import 'data/repositories/preferences_repository.dart';
 import 'data/repositories/profiles_repository.dart';
+import 'data/steam/family_groups_client.dart';
 import 'data/steam/steam_api_client.dart';
 import 'features/dashboard/dashboard_screen.dart';
+import 'services/family_group_sync.dart';
 import 'services/refresh_coordinator.dart';
 import 'state/app_controller.dart';
 import 'theme/app_theme.dart';
@@ -155,12 +158,20 @@ class WatapApp extends StatelessWidget {
 Future<AppController> createAppController() async {
   final AppDatabase database = await AppDatabase.open();
   final ApiKeyStore keyStore = SecureApiKeyStore();
+  final SteamTokenStore tokenStore = SecureSteamTokenStore();
   final SteamApiClient apiClient = SteamApiClient();
+  final FamilyGroupsClient familyGroupsClient = FamilyGroupsClient();
 
   final ProfilesRepository profilesRepository = ProfilesRepository(database);
   final ActivityRepository activityRepository = ActivityRepository(database);
   final PreferencesRepository preferencesRepository =
       PreferencesRepository(database);
+
+  final FamilyGroupSyncService familySyncService = FamilyGroupSyncService(
+    groups: familyGroupsClient,
+    api: apiClient,
+    profiles: profilesRepository,
+  );
 
   final RefreshCoordinator refreshCoordinator = RefreshCoordinator(
     api: apiClient,
@@ -174,7 +185,10 @@ Future<AppController> createAppController() async {
     activityRepository: activityRepository,
     preferencesRepository: preferencesRepository,
     apiKeyStore: keyStore,
+    tokenStore: tokenStore,
     apiClient: apiClient,
+    familyGroupsClient: familyGroupsClient,
+    familySyncService: familySyncService,
     refreshCoordinator: refreshCoordinator,
   );
 }

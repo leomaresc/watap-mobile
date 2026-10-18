@@ -30,7 +30,7 @@ inequívoca los datos ficticios del modo demostración.
 6. [Compilación e instalación](#6-compilación-e-instalación)
 7. [Obtener una clave de Steam Web API](#7-obtener-una-clave-de-steam-web-api)
 8. [Configurar la clave en la aplicación](#8-configurar-la-clave-en-la-aplicación)
-9. [Importar integrantes](#9-importar-integrantes)
+9. [Conectar con Steam (grupo familiar)](#9-conectar-con-steam-grupo-familiar)
 10. [Uso de la aplicación](#10-uso-de-la-aplicación)
 11. [Privacidad y datos almacenados](#11-privacidad-y-datos-almacenados)
 12. [Permisos](#12-permisos)
@@ -64,11 +64,13 @@ Idioma de la interfaz: **español**.
 
 ## 2. Qué hace
 
-- **Importar integrantes en lote**: pega una lista de SteamID64, URLs de perfil
-  (`steamcommunity.com/profiles/…` o `steamcommunity.com/id/…`) o nombres
-  personalizados de Steam. WATAP los resuelve con la API y añade los perfiles
-  encontrados. Cada entrada se procesa individualmente: una inválida no aborta
-  el resto.
+- **Importa tus integrantes automáticamente desde tu grupo familiar de Steam.**
+  Conectas tu cuenta una vez (con la página oficial de Steam en un WebView) y
+  WATAP lee tu familia con `IFamilyGroupsService`, añadiendo cada integrante
+  con su nombre público y avatar. **No tienes que copiar enlaces a mano.**
+- **Importar integrantes a mano (respaldo)**: pega una lista de SteamID64, URLs
+  de perfil o nombres personalizados. Cada entrada se procesa individualmente:
+  una inválida no aborta el resto.
 - **Añadir un perfil individual** por SteamID64, URL o nombre personalizado.
 - **Consultar la actividad reciente** con `GetRecentlyPlayedGames`: minutos de
   las últimas dos semanas y tiempo acumulado, por juego y por integrante.
@@ -78,10 +80,11 @@ Idioma de la interfaz: **español**.
 - **Vista "General"**: actividad **agregada por AppID** de todos los
   integrantes, con desglose por persona y sumas totales. La agregación se hace
   siempre por **AppID**, nunca por nombre de juego.
-- **Vista "Integrantes"**: lista de perfiles con edición de alias, apertura en
-  Steam y eliminación.
-- **Vista "Ajustes"**: gestión de la clave de API, umbrales de actividad,
-  preferencias de visualización, caché y pantallas de privacidad y "Acerca de".
+- **Vista "Integrantes"**: lista de perfiles con sincronización del grupo
+  familiar, edición de alias, apertura en Steam y eliminación.
+- **Vista "Ajustes"**: gestión de la clave de API, conexión con Steam, umbrales
+  de actividad, preferencias de visualización, caché y pantallas de privacidad
+  y "Acerca de".
 - **Caché local**: guarda la última consulta correcta y **la conserva** cuando un
   intento posterior falla, marcándola como procedente de la caché.
 
@@ -96,8 +99,12 @@ Estas ausencias son **decisiones deliberadas**, no funciones pendientes:
 - **No** hace *scraping* de perfiles de `steamcommunity.com`.
 - **No** lee archivos locales de Steam (por ejemplo, de una instalación de
   Windows), ni registros, ni archivos de configuración del cliente.
-- **No** pide tus credenciales de Steam ni simula un inicio de sesión.
-- **No** almacena ningún dato de cuenta de Steam.
+- **No** ve ni guarda tu contraseña de Steam. El inicio de sesión ocurre en la
+  **página oficial de Valve** dentro de un WebView; WATAP solo recibe un token
+  temporal después.
+- **No** almacena tu contraseña ni cookies de sesión. Solo guarda un token
+  temporal (`webapi_token`) en el almacenamiento seguro, para poder leer el
+  grupo familiar sin volver a pedirte la contraseña.
 - **No** ejecuta procesos en segundo plano ni temporizadores periódicos: todo
   ocurre como operaciones asíncronas mientras la aplicación está abierta.
 - **No** envía telemetría, analíticas ni datos de uso a ningún servidor propio.
@@ -292,28 +299,43 @@ sin una propia. Obtenerla es gratuito:
 
 ## 9. Conexión con Steam y grupo familiar
 
-## 9. Importar integrantes
+## 9. Conectar con Steam (grupo familiar)
 
-WATAP no tiene acceso al grupo familiar de Steam (eso requiere un inicio de
-sesión de Steam, que la aplicación no hace). En su lugar, puedes importar una
-lista de perfiles de una sola vez:
+El grupo familiar **no** se puede leer con la clave de Web API: Steam solo lo
+entrega con un token de una sesión iniciada. WATAP obtiene ese token de la forma
+menos invasiva posible:
 
-1. Ve a la sección **Integrantes**.
-2. Pulsa **Importar integrantes**.
-3. Pega una lista de perfiles, uno por línea. Cada entrada puede ser:
-   - Un **SteamID64** de 17 dígitos (`7656119…`);
-   - Una **URL de perfil** (`https://steamcommunity.com/profiles/…` o
-     `https://steamcommunity.com/id/…`);
-   - Un **nombre personalizado** de Steam (`vanity`).
-4. Pulsa **Importar integrantes**. WATAP resuelve cada entrada con la API y
-   añade los perfiles encontrados.
+1. En el asistente inicial (o en **Integrantes → Conectar con Steam**), la app
+   abre la **página oficial de inicio de sesión de Steam** dentro de un WebView.
+2. Tú escribes tu cuenta y contraseña **en la propia página de Valve**. WATAP
+   no las ve, no las guarda y no las envía a ningún sitio.
+3. Después del acceso, Steam redirige a un endpoint que devuelve un token
+   temporal (`webapi_token`). WATAP lo guarda en el **almacenamiento seguro**
+   del dispositivo (Keystore/Keychain).
+4. Con ese token, WATAP llama a `IFamilyGroupsService/GetFamilyGroupForUser` y
+   `GetFamilyGroup` para obtener el nombre de tu familia y sus integrantes.
+5. Cada integrante se añade con su nombre público y avatar (gracias a la clave
+   de Web API) y se marca como `isFamilyMember`.
 
-**Cómo obtener la lista de tu grupo familiar**: en Steam, abre la página de tu
-grupo familiar, copia los perfiles de sus integrantes y pégalos en WATAP. Cada
-perfil individual se puede copiar desde su página de Steam.
+### Cosas importantes
 
-**Nota**: si un nombre personalizado no existe o una entrada es inválida, se
-descarta individualmente sin abortar el resto de la importación.
+- **Si Steam no acepta el WebView** (a veces pide verificación adicional), puedes
+  **omitir el paso** en el asistente y la app sigue funcionando: solo tendrás
+  que importar integrantes a mano desde Integrantes. El paso se puede repetir
+  más tarde desde Integrantes o Ajustes.
+- **El token caduca**. Cuando eso pasa, WATAP borra el token y te pide conectar
+  otra vez. Tus integrantes guardados **no se pierden**.
+- **Los perfiles añadidos a mano nunca se borran** al sincronizar. Solo se
+  retiran los que estaban en el grupo familiar y ya no lo están.
+- **Si tu cuenta no tiene grupo familiar**, Steam lo indica y no se modifica
+  nada.
+
+### Advertencia sobre endpoints internos
+
+`IFamilyGroupsService` **no está en la documentación pública de Valve**: es el
+mismo endpoint que usa el cliente oficial de Steam y puede cambiar sin aviso.
+WATAP interpreta sus respuestas de forma defensiva y muestra un error claro
+(«error 405…») si Steam cambia el formato.
 
 ---
 
@@ -325,17 +347,17 @@ La barra de navegación inferior tiene cuatro secciones:
   ordenación y un interruptor para **ocultar juegos con poca actividad**.
 - **General**: juegos **agregados por AppID**, con el desglose por integrante y
   las sumas totales del grupo.
-- **Integrantes**: lista de perfiles supervisados. Desde aquí puedes importar
-  perfiles en lote, añadir uno individual, editar alias, abrir perfiles en Steam
-  y eliminar.
-- **Ajustes**: clave de API, umbrales de actividad, visualización, caché y
-  pantallas de privacidad y "Acerca de".
+- **Integrantes**: tarjeta del grupo familiar (conexión, sincronización y
+  estado), lista de perfiles y, como respaldo, importación manual.
+- **Ajustes**: conexión con Steam, clave de API, umbrales de actividad,
+  visualización, caché y pantallas de privacidad y "Acerca de".
 
 Acciones habituales:
 
 - **Actualizar todo**: botón de refresco de la cabecera.
 - **Actualizar un integrante**: botón de refresco de su tarjeta.
-- **Importar integrantes**: botón en la sección Integrantes.
+- **Sincronizar grupo familiar**: en la sección Integrentes; vuelve a leer tu
+  familia en Steam y añade/retira integrantes automáticamente.
 - **Abrir el juego en Steam**: icono de enlace de cada juego (abre la ficha en la
   tienda con la aplicación del sistema).
 - **Borrar caché de actividad**: en Ajustes; elimina los datos de actividad y
@@ -351,17 +373,24 @@ telemetría. Todo vive en tu dispositivo:
 | Dato                                   | Dónde se guarda                         |
 | -------------------------------------- | --------------------------------------- |
 | Clave de Steam Web API                 | Almacenamiento seguro (Keystore/Keychain) |
+| Token de sesión de Steam (`webapi_token`) | Almacenamiento seguro (Keystore/Keychain) |
 | Perfiles (SteamID64, nombre, avatar)   | SQLite local                            |
 | Actividad y juegos en caché            | SQLite local                            |
 | Preferencias                           | SQLite local                            |
 | Portadas y avatares                    | Caché de imágenes en disco              |
 
-**Qué sale del dispositivo:** únicamente las solicitudes HTTPS a los endpoints
-públicos de Steam (`api.steampowered.com`) y las descargas de imágenes del CDN
+**Nunca se guarda**: tu contraseña de Steam (se escribe solo en la página de
+Valve dentro del WebView), cookies de sesión ni el resto de la respuesta de la
+página de Steam.
+
+**Qué sale del dispositivo:** únicamente las solicitudes HTTPS a
+`api.steampowered.com` (Steam Web API e `IFamilyGroupsService`), la carga de la
+página oficial de Steam en el WebView y las descargas de imágenes del CDN
 público de Steam. Nada más. La aplicación no contacta con ningún otro servicio.
 
 Puedes vaciar los datos desde **Ajustes**:
 
+- *Desconectar Steam*: borra el token de sesión. Los integrantes se conservan.
 - *Borrar caché de actividad*: elimina actividad y juegos guardados, conserva los
   integrantes.
 - *Borrar caché de imágenes*: elimina portadas y avatares descargados.
@@ -399,6 +428,25 @@ La clave viaja siempre en el encabezado `x-webapi-key`, nunca en la URL.
 | Juegos recientes       | `/IPlayerService/GetRecentlyPlayedGames/v1/`          |
 | Resúmenes de perfiles  | `/ISteamUser/GetPlayerSummaries/v2/`                  |
 | Resolver nombre        | `/ISteamUser/ResolveVanityURL/v1/`                    |
+
+### Endpoints internos (exigen token de sesión)
+
+Estos endpoints **no están en la documentación pública de Steam** y **no
+aceptan la clave de Web API**: requieren el `webapi_token` de una sesión
+iniciada. El token viaja en el cuerpo del `POST`, nunca en la URL.
+
+| Operación                        | Endpoint                                            |
+| -------------------------------- | --------------------------------------------------- |
+| Grupo familiar de la cuenta      | `/IFamilyGroupsService/GetFamilyGroupForUser/v1/`   |
+| Detalle del grupo (integrantes)  | `/IFamilyGroupsService/GetFamilyGroup/v1/`          |
+
+**Advertencia**: son los mismos endpoints que usa el cliente oficial de Steam y
+pueden cambiar o dejar de funcionar sin aviso. WATAP los interpreta de forma
+defensiva y muestra un error claro si Steam cambia el formato.
+
+**Página de token usada por el WebView**:
+`https://store.steampowered.com/pointssummary/ajaxgetasyncconfig` — es una
+página oficial de Steam que, con sesión iniciada, devuelve JSON con el token.
 
 Imágenes (CDN público de Steam):
 

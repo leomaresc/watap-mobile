@@ -14,10 +14,13 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:watap_mobile/app.dart';
 import 'package:watap_mobile/data/local/app_database.dart';
 import 'package:watap_mobile/data/local/secure_api_key_store.dart';
+import 'package:watap_mobile/data/local/steam_token_store.dart';
 import 'package:watap_mobile/data/repositories/activity_repository.dart';
 import 'package:watap_mobile/data/repositories/preferences_repository.dart';
 import 'package:watap_mobile/data/repositories/profiles_repository.dart';
+import 'package:watap_mobile/data/steam/family_groups_client.dart';
 import 'package:watap_mobile/data/steam/steam_api_client.dart';
+import 'package:watap_mobile/services/family_group_sync.dart';
 import 'package:watap_mobile/services/refresh_coordinator.dart';
 import 'package:watap_mobile/state/app_controller.dart';
 import 'package:watap_mobile/widgets/network_image_policy.dart';
@@ -43,6 +46,9 @@ class RecordedRequest {
   Uri get uri => request.url;
 
   Map<String, String> get headers => request.headers;
+
+  /// Cuerpo de la solicitud (formularios `POST`).
+  String get body => request.body;
 
   String? get apiKeyHeader =>
       request.headers[SteamApiHeaderNames.headerName] ?? request.headers['x-webapi-key'];
@@ -117,6 +123,8 @@ class TestEnvironment {
     required this.activityRepository,
     required this.profilesRepository,
     required this.keyStore,
+    required this.tokenStore,
+    required this.familyGroupsClient,
   });
 
   final AppDatabase database;
@@ -126,6 +134,8 @@ class TestEnvironment {
   final ActivityRepository activityRepository;
   final ProfilesRepository profilesRepository;
   final ApiKeyStore keyStore;
+  final SteamTokenStore tokenStore;
+  final FamilyGroupsClient familyGroupsClient;
 
   Future<void> dispose() async {
     controller.dispose();
@@ -137,6 +147,7 @@ class TestEnvironment {
 Future<TestEnvironment> buildTestEnvironment({
   required FakeHttpClient httpClient,
   String? apiKey,
+  String? steamToken,
   Duration timeout = const Duration(seconds: 2),
   int maxConcurrentRequests = 3,
 }) async {
@@ -155,6 +166,17 @@ Future<TestEnvironment> buildTestEnvironment({
       PreferencesRepository(database);
 
   final ApiKeyStore keyStore = InMemoryApiKeyStore(apiKey);
+  final SteamTokenStore tokenStore = InMemorySteamTokenStore(steamToken);
+  final FamilyGroupsClient familyGroupsClient = FamilyGroupsClient(
+    httpClient: httpClient.build(),
+    timeout: timeout,
+  );
+
+  final FamilyGroupSyncService familySyncService = FamilyGroupSyncService(
+    groups: familyGroupsClient,
+    api: client,
+    profiles: profilesRepository,
+  );
 
   final RefreshCoordinator coordinator = RefreshCoordinator(
     api: client,
@@ -168,7 +190,10 @@ Future<TestEnvironment> buildTestEnvironment({
     activityRepository: activityRepository,
     preferencesRepository: preferencesRepository,
     apiKeyStore: keyStore,
+    tokenStore: tokenStore,
     apiClient: client,
+    familyGroupsClient: familyGroupsClient,
+    familySyncService: familySyncService,
     refreshCoordinator: coordinator,
   );
   await controller.initialize();
@@ -181,6 +206,8 @@ Future<TestEnvironment> buildTestEnvironment({
     activityRepository: activityRepository,
     profilesRepository: profilesRepository,
     keyStore: keyStore,
+    tokenStore: tokenStore,
+    familyGroupsClient: familyGroupsClient,
   );
 }
 

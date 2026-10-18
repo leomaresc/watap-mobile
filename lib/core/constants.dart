@@ -41,6 +41,12 @@ class AppConstants {
   /// dispositivo. No es un secreto: es solo el nombre de la entrada.
   static const String apiKeyStorageKey = 'watap.steam.webapi.key';
 
+  /// Nombre de la entrada del `webapi_token` de Steam en el almacén seguro.
+  ///
+  /// Es solo el nombre de la entrada; el valor (el token) nunca se escribe en
+  /// la base de datos ni en ningún archivo.
+  static const String steamTokenStorageKey = 'watap.steam.webapi.token';
+
   // --- Red
   //
 

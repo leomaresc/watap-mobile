@@ -16,12 +16,15 @@ import '../core/validators.dart';
 import '../data/local/app_database.dart';
 import '../data/local/image_cache_service.dart';
 import '../data/local/secure_api_key_store.dart';
+import '../data/local/steam_token_store.dart';
 import '../data/repositories/activity_repository.dart';
 import '../data/repositories/preferences_repository.dart';
 import '../data/repositories/profiles_repository.dart';
+import '../data/steam/family_groups_client.dart';
 import '../data/steam/steam_api_client.dart';
 import '../data/steam/steam_api_errors.dart';
 import '../services/activity_aggregator.dart';
+import '../services/family_group_sync.dart';
 import '../services/refresh_coordinator.dart';
 
 /// Secciones de la navegación inferior.
@@ -97,7 +100,10 @@ class AppController extends ChangeNotifier {
     required ActivityRepository activityRepository,
     required PreferencesRepository preferencesRepository,
     required ApiKeyStore apiKeyStore,
+    required SteamTokenStore tokenStore,
     required SteamApiClient apiClient,
+    required FamilyGroupsClient familyGroupsClient,
+    required FamilyGroupSyncService familySyncService,
     required RefreshCoordinator refreshCoordinator,
     ImageCacheService? imageCacheService,
   })  : _database = database,
@@ -105,7 +111,10 @@ class AppController extends ChangeNotifier {
         _activityRepo = activityRepository,
         _preferencesRepo = preferencesRepository,
         _keyStore = apiKeyStore,
+        _tokenStore = tokenStore,
         _api = apiClient,
+        _groups = familyGroupsClient,
+        _familySync = familySyncService,
         _coordinator = refreshCoordinator,
         _imageCache = imageCacheService ?? ImageCacheService();
 
@@ -114,7 +123,10 @@ class AppController extends ChangeNotifier {
   final ActivityRepository _activityRepo;
   final PreferencesRepository _preferencesRepo;
   final ApiKeyStore _keyStore;
+  final SteamTokenStore _tokenStore;
   final SteamApiClient _api;
+  final FamilyGroupsClient _groups;
+  final FamilyGroupSyncService _familySync;
   final RefreshCoordinator _coordinator;
   final ImageCacheService _imageCache;
 
@@ -123,6 +135,10 @@ class AppController extends ChangeNotifier {
   bool _initialized = false;
   String? _initializationError;
   bool _hasApiKey = false;
+  bool _hasFamilyToken = false;
+  String? _familyGroupName;
+  int? _lastFamilySyncUnix;
+  bool _syncingFamily = false;
 
   List<Profile> _profilesList = <Profile>[];
   Map<String, ProfileActivity> _activities = <String, ProfileActivity>{};
@@ -147,8 +163,26 @@ class AppController extends ChangeNotifier {
 
   bool get hasApiKey => _hasApiKey;
 
+  /// `true` cuando hay un token de sesión de Steam guardado.
+  ///
+  /// Ese token es el que permite leer el grupo familiar; la clave de Web API no
+  /// sirve para eso.
+  bool get hasFamilyToken => _hasFamilyToken;
+
+  /// Nombre del grupo familiar, en la última sincronización correcta.
+  String? get familyGroupName => _familyGroupName;
+
+  /// Marca de tiempo (segundos) de la última sincronización correcta.
+  int? get lastFamilySyncUnix => _lastFamilySyncUnix;
+
+  bool get isSyncingFamily => _syncingFamily;
+
   /// `true` cuando la aplicación tiene todo lo necesario para funcionar.
-  bool get onboardingComplete => _hasApiKey;
+  ///
+  /// Se exige además haber pasado el paso del grupo familiar (conectado u
+  /// omitido explícitamente), para no bloquear si la conexión con Steam falla.
+  bool get onboardingComplete =>
+      _hasApiKey && (_hasFamilyToken || _preferences.familySetupDone);
 
   Preferences get preferences => _preferences;
 
@@ -173,6 +207,11 @@ class AppController extends ChangeNotifier {
 
   /// Todos los perfiles guardados.
   List<Profile> get profiles => List<Profile>.unmodifiable(_profilesList);
+
+  /// Perfiles importados del grupo familiar de Steam.
+  List<Profile> get familyMembers => List<Profile>.unmodifiable(
+        _profilesList.where((Profile p) => p.isFamilyMember),
+      );
 
   bool get hasProfiles => _profilesList.isNotEmpty;
 
@@ -266,12 +305,13 @@ class AppController extends ChangeNotifier {
 
   // --- Inicialización -------------------------------------------------------
 
-  /// Carga preferencias, clave y datos guardados.
+  /// Carga preferencias, credenciales y datos guardados.
   Future<void> initialize() async {
     try {
       _preferences = await _preferencesRepo.load();
       _hasApiKey = await _keyStore.hasApiKey();
       _api.setApiKey(_hasApiKey ? await _keyStore.loadApiKey() : null);
+      _hasFamilyToken = (await _tokenStore.load()) != null;
       _profilesList = await _profiles.loadAll();
       _activities = await _activityRepo.loadAll();
       _section = _preferences.openLastViewedSection
@@ -288,7 +328,7 @@ class AppController extends ChangeNotifier {
 
     if (_initializationError == null) {
       unawaited(_loadImageCacheSize());
-      if (_preferences.refreshOnOpen && _hasApiKey && _profilesList.isNotEmpty) {
+      if (_preferences.refreshOnOpen && onboardingComplete && hasProfiles) {
         unawaited(refreshAll(silent: true));
       }
     }
@@ -323,6 +363,85 @@ class AppController extends ChangeNotifier {
     if (_sortOrder == order) return;
     _sortOrder = order;
     _notify();
+  }
+
+  // --- Conexión con Steam y grupo familiar ----------------------------------
+
+  /// Guarda el `webapi_token` obtenido desde la página de Steam.
+  ///
+  /// El token se escribe **solo** en el almacenamiento seguro del dispositivo.
+  Future<void> saveFamilyToken(String token) async {
+    final String trimmed = token.trim();
+    if (trimmed.isEmpty) return;
+    await _tokenStore.save(trimmed);
+    _hasFamilyToken = true;
+    _notify();
+  }
+
+  /// Elimina el token de Steam del dispositivo.
+  Future<OperationResult> disconnectSteam() async {
+    await _tokenStore.clear();
+    _hasFamilyToken = false;
+    _familyGroupName = null;
+    _lastFamilySyncUnix = null;
+    _notify();
+    return const OperationResult.ok(
+      'Conexión con Steam eliminada del dispositivo. Tus integrantes guardados '
+      'se conservan.',
+    );
+  }
+
+  /// Marca el paso del grupo familiar como completado sin conectar.
+  ///
+  /// Sirve de escape si la página de Steam no carga: la aplicación no debe
+  /// quedar bloqueada. Puede conectarse más tarde desde Integrantes o Ajustes.
+  Future<void> skipFamilySetup() async {
+    if (_preferences.familySetupDone) return;
+    _preferences = _preferences.copyWith(familySetupDone: true);
+    await _preferencesRepo.save(_preferences);
+    _notify();
+  }
+
+  /// Sincroniza la lista de integrantes con el grupo familiar de Steam.
+  Future<FamilySyncOutcome> syncFamilyGroup({bool silent = false}) async {
+    if (_syncingFamily) {
+      return const FamilySyncOutcome.failure(
+        'Ya hay una sincronización del grupo familiar en curso.',
+      );
+    }
+    if (!_hasApiKey) {
+      return const FamilySyncOutcome.failure(
+        'Configura la clave de Steam Web API antes de sincronizar.',
+      );
+    }
+
+    _syncingFamily = true;
+    if (!silent) _notify();
+    try {
+      final String? token = await _tokenStore.load();
+      final FamilySyncOutcome outcome =
+          await _familySync.sync(token ?? '');
+
+      if (outcome.success) {
+        _familyGroupName = outcome.groupName ?? _familyGroupName;
+        _lastFamilySyncUnix = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        _profilesList = await _profiles.loadAll();
+        // La primera sincronización correcta da por superado el asistente.
+        if (!_preferences.familySetupDone) {
+          _preferences = _preferences.copyWith(familySetupDone: true);
+          await _preferencesRepo.save(_preferences);
+        }
+      } else if (outcome.requiresConnect) {
+        // El token ya no sirve: se borra para que la interfaz ofrezca volver a
+        // conectar en lugar de reintentar en vano.
+        await _tokenStore.clear();
+        _hasFamilyToken = false;
+      }
+      return outcome;
+    } finally {
+      _syncingFamily = false;
+      _notify();
+    }
   }
 
   // --- Integrantes ----------------------------------------------------------
@@ -689,6 +808,7 @@ class AppController extends ChangeNotifier {
     _refreshSubscription?.cancel();
     _coordinator.dispose();
     _api.dispose();
+    _groups.dispose();
     unawaited(_database.close());
     super.dispose();
   }

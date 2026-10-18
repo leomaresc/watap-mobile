@@ -66,13 +66,30 @@ void main() {
       expect(env.controller.profiles, isEmpty);
     });
 
-    test('con clave la app está lista', () async {
+    test('con clave y sesión la app está lista', () async {
+      final TestEnvironment env = await buildTestEnvironment(
+        httpClient: _fake(),
+        apiKey: _key,
+        steamToken: 'token-de-prueba',
+      );
+      addTearDown(env.dispose);
+
+      expect(env.controller.hasApiKey, isTrue);
+      expect(env.controller.hasFamilyToken, isTrue);
+      expect(env.controller.onboardingComplete, isTrue);
+    });
+
+    test('con clave y el paso omitido, la app también está lista', () async {
       final TestEnvironment env =
           await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
       addTearDown(env.dispose);
 
-      expect(env.controller.hasApiKey, isTrue);
+      expect(env.controller.onboardingComplete, isFalse);
+
+      await env.controller.skipFamilySetup();
+
       expect(env.controller.onboardingComplete, isTrue);
+      expect(env.controller.hasFamilyToken, isFalse);
     });
   });
 

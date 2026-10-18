@@ -1,7 +1,8 @@
 /// Pantalla "Integrantes": lista de perfiles supervisados.
 ///
-/// Los perfiles se importan de una vez pegando una lista de SteamID64, URLs o
-/// nombres personalizados de Steam. La app resuelve cada entrada con la API.
+/// El flujo principal es **automático**: al conectar con Steam, la app lee el
+/// grupo familiar (`IFamilyGroupsService`) y añade los integrantes con sus
+/// nombres y avatares. La importación manual existe solo como respaldo.
 library;
 
 import 'package:flutter/material.dart';
@@ -9,14 +10,15 @@ import 'package:flutter/material.dart';
 import '../../core/formatters.dart';
 import '../../core/models.dart';
 import '../../data/steam/steam_api_urls.dart';
+import '../../services/family_group_sync.dart';
 import '../../state/app_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/avatar_widget.dart';
-import '../../widgets/empty_state.dart';
 import '../../widgets/error_state.dart';
 import '../../widgets/loading_state.dart';
 import '../../widgets/status_chip.dart';
 import '../../widgets/ui_helpers.dart';
+import '../onboarding/steam_connect_screen.dart';
 import 'add_edit_profile_screen.dart';
 import 'import_members_screen.dart';
 
@@ -41,75 +43,127 @@ class MembersScreen extends StatelessWidget {
 
     final List<Profile> profiles = controller.profiles;
 
+    if (profiles.isEmpty) {
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+          child: Column(
+            children: <Widget>[
+              const Icon(Icons.groups_outlined, size: 48, color: WatapColors.accent),
+              const SizedBox(height: 12),
+              const Text(
+                'Todavía no hay integrantes',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: WatapColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                controller.hasFamilyToken
+                    ? 'Pulsa "Sincronizar grupo familiar" para que WATAP lea '
+                        'los integrantes de tu familia en Steam y los añada '
+                        'solos, con nombre y avatar.'
+                    : 'Conecta tu cuenta de Steam para que WATAP lea tu grupo '
+                        'familiar y añada los integrantes automáticamente.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: WatapColors.textSecondary,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                onPressed: controller.hasFamilyToken
+                    ? () => _sync(context, controller)
+                    : () => _connect(context),
+                icon: controller.hasFamilyToken
+                    ? const Icon(Icons.sync)
+                    : const Icon(Icons.link),
+                label: Text(
+                  controller.hasFamilyToken
+                      ? 'Sincronizar grupo familiar'
+                      : 'Conectar con Steam',
+                ),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: () => _openImport(context),
+                icon: const Icon(Icons.download_outlined, size: 18),
+                label: const Text('Importar a mano (respaldo)'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openImport(context),
-        backgroundColor: WatapColors.accent,
-        foregroundColor: const Color(0xFF08202C),
-        icon: const Icon(Icons.download_outlined),
-        label: const Text('Importar'),
-      ),
-      body: profiles.isEmpty
-          ? EmptyState(
-              title: 'Todavía no hay integrantes',
-              message: 'Pega una lista de SteamID64, URLs de perfil o nombres '
-                  'personalizados de Steam y WATAP los importará de una vez.',
-              icon: Icons.group_add_outlined,
-              actionLabel: 'Importar integrantes',
-              onAction: () => _openImport(context),
-            )
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
-              children: <Widget>[
-                const InlineNotice(
-                  message: 'Esta lista es tu selección personal. WATAP no '
-                      'verifica que los integrantes pertenezcan a un mismo '
-                      'grupo o familia de Steam.',
-                  icon: Icons.info_outline,
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+        children: <Widget>[
+          _FamilyGroupCard(controller: controller),
+          const SizedBox(height: 16),
+          SectionCard(
+            title: 'ACCIONES',
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.download_outlined),
+                title: const Text('Importar a mano (respaldo)'),
+                subtitle: const Text(
+                  'Pega una lista de SteamID64, URLs o nombres personalizados. '
+                  'Solo si la conexión con Steam no funciona.',
                 ),
-                const SizedBox(height: 12),
-                SectionCard(
-                  title: 'ACCIONES',
-                  children: <Widget>[
-                    ListTile(
-                      leading: const Icon(Icons.download_outlined),
-                      title: const Text('Importar integrantes'),
-                      subtitle: const Text(
-                        'Pega una lista de SteamID64, URLs o nombres '
-                        'personalizados',
-                      ),
-                      onTap: () => _openImport(context),
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.person_add_alt_1),
-                      title: const Text('Añadir un solo perfil'),
-                      subtitle: const Text(
-                        'Por SteamID64, URL o nombre personalizado',
-                      ),
-                      onTap: () => _openAdd(context),
-                    ),
-                  ],
+                onTap: () => _openImport(context),
+              ),
+              ListTile(
+                leading: const Icon(Icons.person_add_alt_1),
+                title: const Text('Añadir un solo perfil'),
+                subtitle: const Text(
+                  'Por SteamID64, URL o nombre personalizado',
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  'INTEGRANTES (${profiles.length})',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: WatapColors.textSecondary,
-                    letterSpacing: 0.6,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                for (final Profile profile in profiles)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _MemberTile(controller: controller, profile: profile),
-                  ),
-              ],
+                onTap: () => _openAdd(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'INTEGRANTES (${profiles.length})',
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: WatapColors.textSecondary,
+              letterSpacing: 0.6,
             ),
+          ),
+          const SizedBox(height: 8),
+          for (final Profile profile in profiles)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _MemberTile(controller: controller, profile: profile),
+            ),
+        ],
+      ),
     );
+  }
+
+  void _connect(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (BuildContext _) => const SteamConnectScreen(),
+      ),
+    );
+  }
+
+  Future<void> _sync(BuildContext context, AppController controller) async {
+    final FamilySyncOutcome outcome = await controller.syncFamilyGroup();
+    if (!context.mounted) return;
+    showMessage(context, outcome.messageEs, isError: !outcome.success);
   }
 
   void _openImport(BuildContext context) {
@@ -126,6 +180,80 @@ class MembersScreen extends StatelessWidget {
         builder: (BuildContext _) => AddEditProfileScreen(profile: profile),
       ),
     );
+  }
+}
+
+/// Tarjeta con el estado del grupo familiar y sus acciones.
+class _FamilyGroupCard extends StatelessWidget {
+  const _FamilyGroupCard({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool connected = controller.hasFamilyToken;
+    final bool syncing = controller.isSyncingFamily;
+
+    return SectionCard(
+      title: 'GRUPO FAMILIAR',
+      subtitle: 'Los integrantes se leen de tu familia en Steam. No hace falta '
+          'copiar enlaces a mano.',
+      children: <Widget>[
+        ListTile(
+          leading: Icon(
+            connected ? Icons.groups : Icons.link_off,
+            color: connected ? WatapColors.success : WatapColors.warning,
+          ),
+          title: Text(
+            connected
+                ? ((controller.familyGroupName ?? '').trim().isEmpty
+                    ? 'Conectado con Steam'
+                    : 'Familia: ${controller.familyGroupName!.trim()}')
+                : 'Sin conexión con Steam',
+          ),
+          subtitle: Text(
+            connected
+                ? 'Última sincronización: '
+                    '${formatRelativeTime(controller.lastFamilySyncUnix)}'
+                : 'Conecta tu cuenta para importar tus integrantes solos.',
+          ),
+        ),
+        if (connected)
+          ListTile(
+            leading: syncing
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2.2),
+                  )
+                : const Icon(Icons.sync),
+            title: Text(syncing ? 'Sincronizando…' : 'Sincronizar ahora'),
+            subtitle: const Text('Vuelve a leer el grupo familiar en Steam'),
+            enabled: !syncing,
+            onTap: syncing ? null : () => _sync(context),
+          )
+        else
+          ListTile(
+            leading: const Icon(Icons.link),
+            title: const Text('Conectar con Steam'),
+            subtitle: const Text(
+              'Se abre la página oficial de Steam. Tu contraseña no pasa por '
+              'WATAP.',
+            ),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (BuildContext _) => const SteamConnectScreen(),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _sync(BuildContext context) async {
+    final FamilySyncOutcome outcome = await controller.syncFamilyGroup();
+    if (!context.mounted) return;
+    showMessage(context, outcome.messageEs, isError: !outcome.success);
   }
 }
 

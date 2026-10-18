@@ -39,6 +39,11 @@ dependencies:
   # Apertura de las páginas de Steam con la aplicación del sistema.
   url_launcher: ^6.3.0
 
+  # Página oficial de inicio de sesión de Steam dentro de la app, para
+  # obtener el token que permite leer el grupo familiar. La contraseña la
+  # escribe el usuario en la página de Steam: nunca pasa por nuestro código.
+  webview_flutter: ^4.10.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

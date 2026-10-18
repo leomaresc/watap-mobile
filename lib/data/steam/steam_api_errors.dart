@@ -35,6 +35,9 @@ enum SteamApiErrorKind {
   /// Falta configuración (por ejemplo, la clave de API).
   incompleteConfiguration,
 
+  /// Credenciales de sesión rechazadas (token de Steam caducado o inválido).
+  invalidCredentials,
+
   /// Operación descartada por cancelación o cambio de ciclo de vida.
   cancelled,
 
@@ -92,6 +95,7 @@ FetchStatus fetchStatusForSteamError(SteamApiErrorKind kind) => switch (kind) {
       SteamApiErrorKind.malformedResponse => FetchStatus.malformedResponse,
       SteamApiErrorKind.incompleteConfiguration =>
         FetchStatus.incompleteConfiguration,
+      SteamApiErrorKind.invalidCredentials => FetchStatus.incompleteConfiguration,
       SteamApiErrorKind.cancelled => FetchStatus.notFetched,
       SteamApiErrorKind.http => FetchStatus.networkError,
       SteamApiErrorKind.unknown => FetchStatus.networkError,
@@ -117,6 +121,9 @@ String defaultSteamErrorMessage(SteamApiErrorKind kind) => switch (kind) {
         'Steam devolvió una respuesta inesperada.',
       SteamApiErrorKind.incompleteConfiguration =>
         'Falta configurar la clave de Steam Web API.',
+      SteamApiErrorKind.invalidCredentials =>
+        'La sesión de Steam no es válida o ha caducado. Conecta tu cuenta de '
+        'nuevo para obtener un token actualizado.',
       SteamApiErrorKind.cancelled => 'Consulta descartada.',
       SteamApiErrorKind.unknown => 'No se pudo completar la consulta a Steam.',
     };
