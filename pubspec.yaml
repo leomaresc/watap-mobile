@@ -1,0 +1,54 @@
+name: watap_mobile
+description: >-
+  WATAP Mobile (What Are They Actually Playing?) — consulta y compara la
+  actividad reciente de varios perfiles de Steam desde el móvil.
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.0
+  flutter: ">=3.32.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Textos de los componentes de Material en español (paquete del propio SDK).
+  flutter_localizations:
+    sdk: flutter
+
+  # Red. Se usa directamente para las llamadas HTTPS a la Steam Web API.
+  http: ^1.2.0
+
+  # Almacenamiento seguro exclusivo de la clave de Steam Web API
+  # (Keystore/Keychain). La clave nunca se guarda en SQLite ni en JSON.
+  flutter_secure_storage: ^9.2.2
+
+  # Base de datos local para perfiles, actividades, juegos, preferencias y
+  # metadatos de caché.
+  sqflite: ^2.3.3
+
+  # Rutas locales de la app (base de datos y caché de imágenes).
+  path_provider: ^2.1.4
+  path: ^1.9.0
+
+  # Portadas y avatares con caché persistente y deduplicación de descargas.
+  cached_network_image: ^3.4.1
+  # Se usa directamente para vaciar la caché y calcular su tamaño desde Ajustes.
+  flutter_cache_manager: ^3.4.1
+
+  # Apertura de las páginas de Steam con la aplicación del sistema.
+  url_launcher: ^6.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  # Permite ejecutar las pruebas de base de datos sobre SQLite real sin
+  # necesitar un emulador ni un dispositivo (solo en pruebas).
+  sqflite_common_ffi: ^2.3.3
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/icons/

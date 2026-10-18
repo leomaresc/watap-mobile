@@ -1,0 +1,19 @@
+# Normalización de finales de línea.
+#
+# En el repositorio se guarda siempre LF; al hacer checkout, Git decide según la
+# plataforma. Así el proyecto se mantiene consistente entre Windows, Linux y
+# macOS.
+* text=auto eol=lf
+
+# Recursos binarios: nunca se normalizan ni se marcan como texto.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.ttf binary
+*.otf binary
+*.jar binary
+*.keystore binary
+*.jks binary
