@@ -3,7 +3,7 @@ description: >-
   WATAP Mobile (What Are They Actually Playing?) — consulta y compara la
   actividad reciente de varios perfiles de Steam desde el móvil.
 publish_to: "none"
-version: 1.4.0+4
+version: 1.4.1+5
 
 environment:
   sdk: ^3.9.0
@@ -43,6 +43,7 @@ dependencies:
   # obtener el token que permite leer el grupo familiar. La contraseña la
   # escribe el usuario en la página de Steam: nunca pasa por nuestro código.
   webview_flutter: ^4.10.0
+  xml: ^7.1.0
 
 dev_dependencies:
   flutter_test:

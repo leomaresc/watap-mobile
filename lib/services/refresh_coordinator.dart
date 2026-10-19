@@ -256,8 +256,31 @@ class RefreshCoordinator {
       }
 
       // 3) Juegos recientes.
-      final RecentlyPlayedParseResult recent =
-          await _api.fetchRecentlyPlayedGames(id);
+      RecentlyPlayedParseResult recent;
+      try {
+        recent = await _api.fetchRecentlyPlayedGames(id);
+      } on SteamApiException catch (e) {
+        // El perfil sí es público (lo acaba de confirmar el resumen o el XML)
+        // pero Steam rechaza la consulta de juegos. Con solo el token no se
+        // puede descartar que este endpoint exija clave, así que se informan
+        // las dos causas posibles en lugar de afirmar "perfil privado".
+        if (e.kind == SteamApiErrorKind.privateOrUnavailable &&
+            visibility == 3 &&
+            !_api.hasApiKey) {
+          return ProfileActivity(
+            steamId64: id,
+            personaName: summary.personaName ?? profile.personaName,
+            avatarUrl: summary.avatarUrl ?? profile.avatarUrl,
+            status: FetchStatus.incompleteConfiguration,
+            statusMessage: 'Steam no entrega los juegos recientes con la '
+                'sesión actual: pueden ser los "Detalles del juego" privados '
+                'o que esta consulta exige una clave de Web API. Puedes '
+                'volver a conectar tu Steam o guardar una clave en Ajustes '
+                '(respaldo).',
+          );
+        }
+        rethrow;
+      }
 
       if (!recent.isUsable) {
         // Respuesta `{"response":{}}`: Steam no ha entregado datos. No se debe

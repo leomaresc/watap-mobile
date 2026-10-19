@@ -113,6 +113,39 @@ http.Response jsonResponse(
 }) =>
     http.Response(body, status, headers: headers);
 
+/// Respuesta XML lista para usar en las pruebas (perfil de Steam Community).
+http.Response xmlResponse(String body, {int status = 200}) => http.Response(
+      body,
+      status,
+      headers: const <String, String>{
+        'content-type': 'application/xml; charset=utf-8',
+      },
+    );
+
+/// Cuerpo del XML público de un perfil, con valores envueltos en CDATA como
+/// hace Steam de verdad (`steamID`, `avatarFull`, …).
+String communityProfileXmlBody({
+  String steamId64 = '76561198000000000',
+  String name = 'Ana',
+  int visibilityState = 3,
+  String privacyState = 'public',
+  String? avatarUrl = 'https://avatars.example/anafull.jpg',
+}) =>
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    '<profile>'
+    '<steamID64>$steamId64</steamID64>'
+    '<steamID><![CDATA[$name]]></steamID>'
+    '<privacyState>$privacyState</privacyState>'
+    '<visibilityState>$visibilityState</visibilityState>'
+    '${avatarUrl == null ? '' : '<avatarFull><![CDATA[$avatarUrl]]></avatarFull>'}'
+    '</profile>';
+
+/// Respuesta de Steam para un perfil inexistente.
+const String communityProfileNotFoundXml =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    '<response><error><![CDATA[The specified profile could not be found.]]>'
+    '</error></response>';
+
 /// Entorno de prueba con base de datos en memoria y cliente simulado.
 class TestEnvironment {
   TestEnvironment({

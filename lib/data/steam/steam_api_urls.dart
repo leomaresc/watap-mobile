@@ -1,13 +1,15 @@
 /// Construcción de las URLs utilizadas por WATAP Mobile.
 ///
-/// Solo se emplean endpoints públicos y documentados de la Steam Web API y el
-/// CDN público de imágenes. **Ninguna URL contiene la clave de API**: la clave
-/// viaja en el encabezado `x-webapi-key` (ver `SteamApiClient`), de modo que no
-/// aparece en rutas, cachés intermedias ni registros.
+/// Solo se emplean endpoints públicos de Valve: la Steam Web API, el XML
+/// público de perfil de Steam Community y el CDN público de imágenes.
+/// **Ninguna URL contiene la clave de API**: la clave viaja en el encabezado
+/// `x-webapi-key` (ver `SteamApiClient`), de modo que no aparece en rutas,
+/// cachés intermedias ni registros.
 ///
 /// El `access_token` de sesión sí viaja como parámetro de la URL — Steam exige
 /// `GET` y esa es la forma en que la propia web de Steam lo envía. Va siempre
-/// sobre una conexión HTTPS directa a `api.steampowered.com` y **nunca** se
+/// sobre una conexión HTTPS directa a `api.steampowered.com`, **nunca** a
+/// `steamcommunity.com` (el XML público se consulta sin credencial) y jamás se
 /// registra en la aplicación.
 ///
 /// Funciones puras y probadas en `test/data/steam_api_urls_test.dart`.
@@ -58,6 +60,32 @@ class SteamApiUrls {
         'include_appinfo': includeAppInfo ? '1' : '0',
         'format': 'json',
       },
+    );
+  }
+
+  /// XML público del perfil de Steam Community (fuente sin credenciales).
+  ///
+  /// Steam Community publica el XML oficial de un perfil bajo
+  /// `https://steamcommunity.com/profiles/{id}?xml=1`: datos estructurados,
+  /// nunca HTML. WATAP lo consulta **solo cuando no hay clave de Web API** y
+  /// **sin ninguna credencial** (el token jamás se envía a este host).
+  static Uri communityProfileXml(String steamId64) {
+    return Uri.https(
+      AppConstants.steamCommunityHost,
+      '/profiles/$steamId64',
+      <String, String>{'xml': '1'},
+    );
+  }
+
+  /// XML público del perfil asociado a un nombre personalizado (vanity).
+  ///
+  /// Permite resolver `steamcommunity.com/id/ejemplo` a SteamID64 sin clave:
+  /// si no existe, Steam responde `<response><error>…</error></response>`.
+  static Uri communityVanityProfileXml(String vanity) {
+    return Uri.https(
+      AppConstants.steamCommunityHost,
+      '/id/${vanity.trim()}',
+      <String, String>{'xml': '1'},
     );
   }
 

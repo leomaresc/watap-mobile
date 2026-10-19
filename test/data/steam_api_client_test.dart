@@ -1,9 +1,11 @@
 /// Pruebas del cliente HTTP de Steam con un cliente simulado.
 ///
 /// Comprueban, entre otras cosas, que la clave viaja en el encabezado y nunca en
-/// la URL, que el token de sesión viaja como `access_token` cuando no hay clave,
-/// que un 429 abre una ventana de espera, que la interpretación de
-/// 401/403 depende del endpoint y del modo de autenticación y que se evitan
+/// la URL, que el token de sesión viaja como `access_token` hacia
+/// `api.steampowered.com`, que sin clave los resúmenes y la resolución de
+/// nombres se leen del XML público de Steam Community **sin ninguna
+/// credencial**, que un 429 abre una ventana de espera, que la interpretación
+/// de 401/403 depende del endpoint y del modo de autenticación y que se evitan
 /// solicitudes duplicadas.
 library;
 
@@ -11,6 +13,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:watap_mobile/core/models.dart';
 import 'package:watap_mobile/data/steam/steam_api_client.dart';
 import 'package:watap_mobile/data/steam/steam_api_errors.dart';
 
@@ -93,21 +96,119 @@ void main() {
       client.dispose();
     });
 
-    test('el token viaja como access_token en la URL, sin clave en cabecera',
+    test('el token viaja como access_token hacia api.steampowered.com',
         () async {
-      final FakeHttpClient fake = FakeHttpClient(
-        (http.Request _) =>
-            jsonResponse(_summariesJson(<String>['76561198000000000'])),
-      );
+      final FakeHttpClient fake =
+          FakeHttpClient((http.Request _) => jsonResponse(_recentJson));
       final SteamApiClient client = tokenClient(fake);
 
-      await client.fetchPlayerSummaries(<String>['76561198000000000']);
+      await client.fetchRecentlyPlayedGames('76561198000000000');
 
       final RecordedRequest recorded = fake.requests.single;
+      expect(recorded.uri.host, 'api.steampowered.com');
       expect(recorded.uri.queryParameters['access_token'], _token);
       expect(recorded.apiKeyHeader, isNull,
           reason: 'Sin clave no se envía cabecera de credencial.');
       expect(recorded.hasKeyInUrl, isFalse);
+      client.dispose();
+    });
+
+    test('con solo el token, los resúmenes se leen del XML público sin ninguna '
+        'credencial', () async {
+      final FakeHttpClient fake = FakeHttpClient(
+        (http.Request _) => xmlResponse(communityProfileXmlBody()),
+      );
+      final SteamApiClient client = tokenClient(fake);
+
+      final List<SteamPlayerSummary> summaries =
+          await client.fetchPlayerSummaries(<String>['76561198000000000']);
+
+      // Steam exige key= en ISteamUser: con solo token no se consulta la API.
+      final RecordedRequest recorded = fake.requests.single;
+      expect(recorded.uri.host, 'steamcommunity.com');
+      expect(recorded.uri.path, '/profiles/76561198000000000');
+      expect(recorded.uri.queryParameters['xml'], '1');
+      expect(recorded.uri.queryParameters.containsKey('access_token'), isFalse,
+          reason: 'El token jamás se envía a steamcommunity.com.');
+      expect(recorded.apiKeyHeader, isNull);
+      // Y el modelo devuelto es indistinguible del de la API con clave.
+      expect(summaries.single.personaName, 'Ana');
+      expect(summaries.single.communityVisibilityState, 3);
+      expect(summaries.single.avatarUrl, isNotNull);
+      client.dispose();
+    });
+
+    test('un perfil inexistente en el XML se omite sin tumbar el lote', () async {
+      final FakeHttpClient fake =
+          FakeHttpClient((http.Request _) => xmlResponse(communityProfileNotFoundXml));
+      final SteamApiClient client = tokenClient(fake);
+
+      final List<SteamPlayerSummary> summaries =
+          await client.fetchPlayerSummaries(<String>['76561198000000000']);
+
+      expect(summaries, isEmpty,
+          reason: 'El llamador mostrará «perfil no encontrado» con el vacío.');
+      client.dispose();
+    });
+
+    test('un XML inesperado se traduce como respuesta malformada, no como '
+        'perfil inválido', () async {
+      final FakeHttpClient fake =
+          FakeHttpClient((http.Request _) => xmlResponse('<html>?</html>'));
+      final SteamApiClient client = tokenClient(fake);
+
+      await expectLater(
+        client.fetchPlayerSummaries(<String>['76561198000000000']),
+        _throwsSteamError(SteamApiErrorKind.malformedResponse),
+      );
+      client.dispose();
+    });
+
+    test('un 401 del XML público es un bloqueo del servidor, no la sesión',
+        () async {
+      final FakeHttpClient fake =
+          FakeHttpClient((http.Request _) => http.Response('', 401));
+      final SteamApiClient client = tokenClient(fake);
+
+      await expectLater(
+        client.fetchPlayerSummaries(<String>['76561198000000000']),
+        _throwsSteamError(SteamApiErrorKind.http),
+      );
+      client.dispose();
+    });
+
+    test('con solo el token, el nombre personalizado se resuelve con el XML '
+        'público', () async {
+      final FakeHttpClient fake = FakeHttpClient(
+        (http.Request _) =>
+            xmlResponse(communityProfileXmlBody(steamId64: '76561198000000077')),
+      );
+      final SteamApiClient client = tokenClient(fake);
+
+      final VanityResolution result = await client.resolveVanityUrl('ana');
+
+      expect(result.success, isTrue);
+      expect(result.steamId64, '76561198000000077');
+      final RecordedRequest recorded = fake.requests.single;
+      expect(recorded.uri.host, 'steamcommunity.com');
+      expect(recorded.uri.path, '/id/ana');
+      expect(recorded.uri.queryParameters['xml'], '1');
+      expect(recorded.uri.queryParameters.containsKey('access_token'), isFalse,
+          reason: 'El token jamás se envía a steamcommunity.com.');
+      client.dispose();
+    });
+
+    test('un nombre personalizado inexistente da un mensaje claro', () async {
+      final FakeHttpClient fake = FakeHttpClient(
+        (http.Request _) => xmlResponse(communityProfileNotFoundXml),
+      );
+      final SteamApiClient client = tokenClient(fake);
+
+      final VanityResolution result = await client.resolveVanityUrl('nadie');
+
+      expect(result.success, isFalse);
+      expect(result.messageEs, contains('No existe ningún perfil'));
+      client.dispose();
     });
 
     test('sin credenciales, la consulta se bloquea antes de salir', () async {
@@ -127,16 +228,17 @@ void main() {
       client.dispose();
     });
 
-    test('un 401 en modo token se traduce como sesión caducada, no como clave',
-        () async {
+    test('con solo el token, un 401 en la actividad indica privacidad o datos '
+        'no disponibles', () async {
       final FakeHttpClient fake =
           FakeHttpClient((http.Request _) => http.Response('', 401));
       final SteamApiClient client = tokenClient(fake);
 
       await expectLater(
-        client.fetchPlayerSummaries(<String>['76561198000000000']),
-        _throwsSteamError(SteamApiErrorKind.invalidCredentials),
+        client.fetchRecentlyPlayedGames('76561198000000000'),
+        _throwsSteamError(SteamApiErrorKind.privateOrUnavailable),
       );
+      client.dispose();
     });
   });
 

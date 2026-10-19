@@ -81,6 +81,7 @@ class _Env {
 Future<_Env> _env({
   FakeHttpClient? httpClient,
   String? apiKey = _key,
+  String? steamToken,
   int maxConcurrent = 3,
 }) async {
   final FakeHttpClient fake = httpClient ?? FakeHttpClient(_dispatch);
@@ -93,6 +94,7 @@ Future<_Env> _env({
     maxTransientRetries: 0,
   );
   client.setApiKey(apiKey);
+  client.setAccessToken(steamToken);
   final RefreshCoordinator coordinator = RefreshCoordinator(
     api: client,
     activities: activities,
@@ -187,6 +189,113 @@ void main() {
     final ProfileActivity result = await env.coordinator.refreshProfile(profile);
 
     expect(result.status, FetchStatus.invalidProfile);
+  });
+
+  // --- Modo sin clave (solo token de sesión) --------------------------------
+
+  /// Enrutado de un entorno sin clave: el XML público responde con el nombre
+  /// y la actividad con un juego.
+  http.Response tokenModeDispatch(http.Request request) {
+    if (request.url.host == 'steamcommunity.com') {
+      return xmlResponse(communityProfileXmlBody(
+        steamId64: _id,
+        name: 'Ana',
+        visibilityState: 3,
+      ));
+    }
+    if (request.url.path.contains('GetRecentlyPlayedGames')) {
+      return jsonResponse(_recentJson);
+    }
+    return jsonResponse('{}');
+  }
+
+  test('sin clave, nombre y visibilidad vienen del XML público y hay juegos',
+      () async {
+    final _Env env = await _env(
+      apiKey: null,
+      steamToken: 'tok-de-prueba-9',
+      httpClient: FakeHttpClient(tokenModeDispatch),
+    );
+    addTearDown(env.dispose);
+    final Profile profile = _profile(_id);
+    await env.profiles.upsert(profile);
+
+    final ProfileActivity result = await env.coordinator.refreshProfile(profile);
+
+    expect(result.status, FetchStatus.ok);
+    expect(result.personaName, 'Ana');
+    expect(result.games.single.appId, 570);
+    expect((await env.profiles.findById(_id))!.personaName, 'Ana',
+        reason: 'El nombre del XML se guarda en el perfil.');
+    // El token jamás viaja a steamcommunity.com.
+    for (final RecordedRequest r in env.fake.requests) {
+      if (r.uri.host == 'steamcommunity.com') {
+        expect(r.uri.queryParameters.containsKey('access_token'), isFalse);
+      }
+    }
+  });
+
+  test('sin clave, un perfil privado según el XML no consulta los juegos',
+      () async {
+    final _Env env = await _env(
+      apiKey: null,
+      steamToken: 'tok-de-prueba-9',
+      httpClient: FakeHttpClient(
+        (http.Request request) => request.url.host == 'steamcommunity.com'
+            ? xmlResponse(communityProfileXmlBody(
+                steamId64: _id, name: 'Ana', visibilityState: 1))
+            : jsonResponse(_recentJson),
+      ),
+    );
+    addTearDown(env.dispose);
+    final Profile profile = _profile(_id);
+    await env.profiles.upsert(profile);
+
+    final ProfileActivity result = await env.coordinator.refreshProfile(profile);
+
+    expect(result.status, FetchStatus.privateOrUnavailable);
+    expect(env.fake.requestsTo('GetRecentlyPlayedGames'), isEmpty);
+  });
+
+  test('perfil público pero juegos rechazados sin clave: se informa con '
+      'honestidad en lugar de culpar solo a la privacidad', () async {
+    final _Env env = await _env(
+      apiKey: null,
+      steamToken: 'tok-de-prueba-9',
+      httpClient: FakeHttpClient(
+        (http.Request request) => request.url.host == 'steamcommunity.com'
+            ? xmlResponse(communityProfileXmlBody(steamId64: _id, name: 'Ana'))
+            : http.Response('', 403),
+      ),
+    );
+    addTearDown(env.dispose);
+    final Profile profile = _profile(_id);
+    await env.profiles.upsert(profile);
+
+    final ProfileActivity result = await env.coordinator.refreshProfile(profile);
+
+    expect(result.status, FetchStatus.incompleteConfiguration);
+    expect(result.statusMessage, contains('clave de Web API'));
+  });
+
+  test('sin clave, un perfil inexistente en el XML se marca como no válido',
+      () async {
+    final _Env env = await _env(
+      apiKey: null,
+      steamToken: 'tok-de-prueba-9',
+      httpClient: FakeHttpClient(
+        (http.Request _) => xmlResponse(communityProfileNotFoundXml),
+      ),
+    );
+    addTearDown(env.dispose);
+    final Profile profile = _profile(_id);
+    await env.profiles.upsert(profile);
+
+    final ProfileActivity result = await env.coordinator.refreshProfile(profile);
+
+    expect(result.status, FetchStatus.invalidProfile);
+    expect(env.fake.requestsTo('GetRecentlyPlayedGames'), isEmpty,
+        reason: 'Ni se consulta la actividad de un perfil inexistente.');
   });
 
   test('un fallo de red conserva la actividad anterior como caché', () async {

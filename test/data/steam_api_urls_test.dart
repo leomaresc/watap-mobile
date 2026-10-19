@@ -47,6 +47,28 @@ void main() {
     });
   });
 
+  group('XML público de perfil (fuente sin credenciales)', () {
+    test('communityProfileXml apunta a steamcommunity.com con xml=1', () {
+      final Uri uri = SteamApiUrls.communityProfileXml('76561198000000000');
+      expect(uri.scheme, 'https');
+      expect(uri.host, 'steamcommunity.com');
+      expect(uri.path, '/profiles/76561198000000000');
+      expect(uri.queryParameters['xml'], '1');
+      expect(uri.queryParameters.containsKey('key'), isFalse);
+      expect(uri.queryParameters.containsKey('access_token'), isFalse,
+          reason: 'El token jamás viaja a steamcommunity.com.');
+    });
+
+    test('communityVanityProfileXml usa /id/{nombre} recortado', () {
+      final Uri uri = SteamApiUrls.communityVanityProfileXml('  nombre  ');
+      expect(uri.scheme, 'https');
+      expect(uri.host, 'steamcommunity.com');
+      expect(uri.path, '/id/nombre');
+      expect(uri.queryParameters['xml'], '1');
+      expect(uri.queryParameters.containsKey('access_token'), isFalse);
+    });
+  });
+
   group('recursos del CDN', () {
     test('gameCover apunta a la cabecera del AppID', () {
       expect(

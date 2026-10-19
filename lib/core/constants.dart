@@ -11,12 +11,18 @@ class AppConstants {
   static const String appName = 'WATAP';
   static const String appExpandedName = 'What Are They Actually Playing?';
   static const String appSubtitle = 'Actividad reciente de tus perfiles de Steam';
-  static const String appVersion = '1.4.0';
+  static const String appVersion = '1.4.1';
   static const String appBuild = '1';
 
   // --- Steam ---------------------------------------------------------------
 
   static const String steamApiBaseUrl = 'https://api.steampowered.com';
+
+  /// Host de la Steam Web API. El token de sesión solo viaja hacia este host.
+  static const String steamApiHost = 'api.steampowered.com';
+
+  /// Host de Steam Community (XML público de perfil, sin credenciales).
+  static const String steamCommunityHost = 'steamcommunity.com';
   static const String steamCdnBaseUrl = 'https://cdn.cloudflare.steamstatic.com';
   static const String steamCommunityBaseUrl = 'https://steamcommunity.com';
   static const String steamStoreBaseUrl = 'https://store.steampowered.com';

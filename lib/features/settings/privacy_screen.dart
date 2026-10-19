@@ -39,12 +39,16 @@ class PrivacyScreen extends StatelessWidget {
           const _Paragraph(
             title: 'Qué se envía y a dónde',
             body: 'Solo se realizan las solicitudes necesarias a la Steam Web API '
-                '(${AppConstants.steamApiBaseUrl}), la carga de la página oficial '
-                'de Steam en el WebView y las descargas de portadas y avatares '
-                'desde el CDN público de imágenes de Steam. La clave viaja en el '
-                'encabezado "${AppConstants.steamApiKeyHeader}"; el token de '
-                'sesión viaja como parámetro de la URL sobre la conexión HTTPS '
-                'directa a Steam (como hace la propia web de Steam) y nunca se '
+                '(${AppConstants.steamApiBaseUrl}), la consulta del perfil '
+                'público en XML de Steam Community '
+                '(${AppConstants.steamCommunityHost}, solo cuando no hay clave '
+                'de Web API y siempre sin credencial), la carga de la página '
+                'oficial de Steam en el WebView y las descargas de portadas y '
+                'avatares desde el CDN público de imágenes de Steam. La clave '
+                'viaja en el encabezado "${AppConstants.steamApiKeyHeader}"; '
+                'el token de sesión viaja como parámetro de la URL sobre la '
+                'conexión HTTPS directa a la Steam Web API (como hace la '
+                'propia web de Steam), jamás a steamcommunity.com, y nunca se '
                 'registra.',
           ),
           const _Paragraph(

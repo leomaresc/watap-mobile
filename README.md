@@ -66,7 +66,8 @@ Idioma de la interfaz: **español**.
 - **Un solo paso de configuración: conectar tu cuenta de Steam.** Conectas una
   vez (con la página oficial de Steam en un WebView) y WATAP:
   - lee tu grupo familiar con `IFamilyGroupsService` e **importa tus
-    integrantes automáticamente**, con su nombre público y avatar; y
+    integrantes automáticamente**, con su nombre público y avatar (de la API
+    con clave, o del perfil público en XML cuando no la hay); y
   - consulta la actividad de cada uno con el **mismo token de sesión**.
   **No hace falta pedir una clave de API ni copiar enlaces a mano.** La clave de
   Web API queda como **respaldo opcional** por si la conexión no funciona.
@@ -98,7 +99,9 @@ Estas ausencias son **decisiones deliberadas**, no funciones pendientes:
 
 - **No** consulta el estado "en línea ahora" ni afirma que alguien esté jugando
   en este momento.
-- **No** hace *scraping* de perfiles de `steamcommunity.com`.
+- **No** hace *scraping* del HTML de `steamcommunity.com`. Cuando no hay clave
+  de Web API, consulta el **XML público oficial de perfil** (`?xml=1`), que
+  devuelve datos estructurados; jamás se analiza HTML.
 - **No** lee archivos locales de Steam (por ejemplo, de una instalación de
   Windows), ni registros, ni archivos de configuración del cliente.
 - **No** ve ni guarda tu contraseña de Steam. El inicio de sesión ocurre en la
@@ -443,16 +446,28 @@ notificaciones.
 
 ### Endpoints públicos (Steam Web API)
 
-Con la conexión normal (sin clave), la credencial viaja como parámetro
-`access_token` de la URL, sobre la conexión HTTPS directa a Steam. Si has
-configurado la clave de respaldo, esta viaja en el encabezado `x-webapi-key`
-y la URL queda sin credencial.
+Con la clave de respaldo configurada, la credencial viaja en el encabezado
+`x-webapi-key` y la URL queda sin credencial. Con solo el token de sesión, la
+actividad viaja como parámetro `access_token` de la URL, sobre la conexión
+HTTPS directa a Steam (igual que la propia web de Steam).
 
-| Operación              | Endpoint                                              |
-| ---------------------- | ----------------------------------------------------- |
-| Juegos recientes       | `/IPlayerService/GetRecentlyPlayedGames/v1/`          |
-| Resúmenes de perfiles  | `/ISteamUser/GetPlayerSummaries/v2/`                  |
-| Resolver nombre        | `/ISteamUser/ResolveVanityURL/v1/`                    |
+| Operación              | Endpoint                                              | Sin clave |
+| ---------------------- | ----------------------------------------------------- | --------- |
+| Juegos recientes       | `/IPlayerService/GetRecentlyPlayedGames/v1/`          | Con token |
+| Resúmenes de perfiles  | `/ISteamUser/GetPlayerSummaries/v2/`                  | **No** (exige `key=`) |
+| Resolver nombre        | `/ISteamUser/ResolveVanityURL/v1/`                    | **No** (exige `key=`) |
+
+`ISteamUser` responde HTTP 400 «Required parameter 'key'» cuando no hay clave.
+Por eso, **sin clave**, el nombre, el avatar y la visibilidad del perfil se
+leen del XML público oficial de Steam Community —siempre **sin ninguna
+credencial**, y con el token jamás viajando hacia `steamcommunity.com`:
+
+- Perfil por SteamID64: `https://steamcommunity.com/profiles/{id}?xml=1`
+- Perfil por nombre personalizado: `https://steamcommunity.com/id/{nombre}?xml=1`
+
+La respuesta es XML estructurado (nunca HTML) y se interpreta de forma
+defensiva: si Steam responde `<response><error>…</error></response>`, el
+perfil no existe.
 
 ### Endpoints internos (exigen token de sesión)
 
@@ -557,20 +572,24 @@ Cobertura funcional de la suite:
 - **Agregación**: suma por AppID, acumulados incompletos, ordenaciones, filtros y
   búsqueda.
 - **Red**: encabezado `x-webapi-key` (y ausencia de la clave en la URL),
-  autenticación por token de sesión (`access_token` en la URL, sin cabecera de
-  clave), 429 con `Retry-After`, interpretación de 401/403 por endpoint y por
-  modo de autenticación, 400/500, JSON inválido, deduplicación y límite de
-  concurrencia, y verificación de clave.
+  autenticación por token de sesión (`access_token` en la URL de la Web API y
+  **ausente** en las consultas al XML de `steamcommunity.com`), XML público de
+  perfil (nombre, visibilidad, perfil inexistente, XML malformado y
+  resolución de *vanity* sin clave), 429 con `Retry-After`, interpretación de
+  401/403 por endpoint y por modo de autenticación, 400/500, JSON inválido,
+  deduplicación y límite de concurrencia, y verificación de clave.
 - **Parseo**: respuestas válidas, `{"response":{}}` como "no disponible",
-  negativos saturados, datos ausentes como `null`, resolución de *vanity* y lista
-  de amigos.
+  negativos saturados, datos ausentes como `null`, resolución de *vanity* y
+  lista de amigos; y XML público de perfil (CDATA, privacidad, respaldo de
+  visibilidad y ausencia de identidad).
 - **Almacenamiento local**: persistencia, prevención de duplicados, borrado en
   cascada, política de caché, migraciones desde la versión 1 y **aislamiento de
   las credenciales** (se comprueba que la clave no aparece en ninguna tabla).
 - **Servicios**: agregador de actividad, coordinador de actualizaciones
   (privacidad, caché ante fallos y concurrencia del flujo) y **sincronización
   del grupo familiar** (parseo, reconciliación conservadora, cliente con token,
-  sin clave y sin cuerpo en el `GET`).
+  sin clave y sin cuerpo en el `GET`), con nombres tomados del XML público
+  cuando no hay clave.
 - **Controlador**: modos de arranque, alta/duplicados/resolución de *vanity*,
   gestión de la clave y del token de sesión, criterios del asistente (solo
   token, solo clave u omitido bastan), actualización y borrado de caché.
@@ -618,7 +637,10 @@ pasar" el análisis.**
   (verificado con herramientas de terceros y con la propia app). Para leer la
   actividad se envía el mismo token, tal como hacen herramientas públicas
   existentes; si Steam lo rechazara en tu cuenta, WATAP lo indica y te ofrece
-  la **clave de Web API como respaldo** (apartados 7 y 8).
+  la **clave de Web API como respaldo** (apartados 7 y 8). `ISteamUser`
+  (resúmenes de perfil y resolución de nombres personalizados) **sí exige
+  clave** —verificado empíricamente—: sin ella, WATAP obtiene nombre, avatar y
+  visibilidad del **XML público de perfil** de Steam Community, sin credencial.
 - **Importación de amigos**: la lista de amigos es privada por defecto; requiere
   marcarte como "mi perfil" y que la lista sea accesible con tu credencial.
 

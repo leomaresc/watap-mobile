@@ -254,6 +254,52 @@ void main() {
       expect(named!.personaName, 'Ana');
     });
 
+    test('sin clave, los integrantes toman el nombre del XML público',
+        () async {
+      final TestEnvironment env = await buildTestEnvironment(
+        httpClient: FakeHttpClient(
+          (http.Request request) {
+            final Uri url = request.url;
+            if (url.path.contains('GetFamilyGroupForUser')) {
+              return jsonResponse(_forUserJson);
+            }
+            if (url.path.contains('GetFamilyGroup')) {
+              return jsonResponse(_groupJson);
+            }
+            if (url.host == 'steamcommunity.com') {
+              // Un integrante tiene perfil público; el otro no existe.
+              return url.path.contains('76561198000000000')
+                  ? xmlResponse(communityProfileXmlBody(
+                      steamId64: '76561198000000000', name: 'Ana'))
+                  : xmlResponse(communityProfileNotFoundXml);
+            }
+            return jsonResponse('{}');
+          },
+        ),
+        steamToken: _token,
+      );
+      addTearDown(env.dispose);
+
+      final FamilySyncOutcome outcome = await env.controller.syncFamilyGroup();
+
+      expect(outcome.success, isTrue);
+      expect(outcome.added, 2);
+      final Profile ana = env.controller.profiles
+          .firstWhere((Profile p) => p.steamId64 == '76561198000000000');
+      expect(ana.personaName, 'Ana',
+          reason: 'Sin clave, el nombre debe venir del XML público.');
+      final Profile other = env.controller.profiles
+          .firstWhere((Profile p) => p.steamId64 == '76561198000000009');
+      expect(other.personaName, isNull,
+          reason: 'Un perfil inexistente no inventa nombre.');
+      // El token jamás viaja a steamcommunity.com.
+      for (final RecordedRequest r in env.httpClient.requests) {
+        if (r.uri.host == 'steamcommunity.com') {
+          expect(r.uri.queryParameters.containsKey('access_token'), isFalse);
+        }
+      }
+    });
+
     test('sin token no se consulta nada y se pide conectar', () async {
       final FakeHttpClient fake =
           FakeHttpClient((http.Request _) => jsonResponse('{}'));
