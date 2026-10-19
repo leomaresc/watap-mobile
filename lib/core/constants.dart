@@ -1,8 +1,9 @@
 /// Constantes globales de WATAP Mobile.
 ///
-/// Ningún valor de este archivo contiene secretos. La clave de la Steam Web API
-/// se introduce en tiempo de ejecución y se guarda en el almacenamiento seguro
-/// del dispositivo (ver `SecureApiKeyStore`).
+/// Ningún valor de este archivo contiene secretos. La única credencial es el
+/// `webapi_token` de la sesión de Steam, que se obtiene del WebView de inicio
+/// de sesión y se guarda en el almacenamiento seguro del dispositivo (ver
+/// `SteamTokenStore`).
 class AppConstants {
   const AppConstants._();
 
@@ -11,8 +12,8 @@ class AppConstants {
   static const String appName = 'WATAP';
   static const String appExpandedName = 'What Are They Actually Playing?';
   static const String appSubtitle = 'Actividad reciente de tus perfiles de Steam';
-  static const String appVersion = '1.4.1';
-  static const String appBuild = '1';
+  static const String appVersion = '1.5.0';
+  static const String appBuild = '6';
 
   // --- Steam ---------------------------------------------------------------
 
@@ -29,23 +30,9 @@ class AppConstants {
   static const String steamMediaBaseUrl =
       'https://media.steampowered.com/steamcommunity/public/images/apps';
 
-  /// Página oficial para solicitar una clave de Steam Web API.
-  static const String steamApiKeyRegistrationUrl =
-      'https://steamcommunity.com/dev/apikey';
-
   /// Documentación de los endpoints utilizados.
   static const String steamWebApiDocsUrl =
       'https://steamcommunity.com/dev';
-
-  /// Encabezado admitido por la Steam Web API para enviar la clave.
-  ///
-  /// Se prefiere el encabezado frente al parámetro `key` de la URL para que la
-  /// clave no aparezca en rutas ni en registros de intermediarios.
-  static const String steamApiKeyHeader = 'x-webapi-key';
-
-  /// Referencia con la que se guarda la clave en el almacén seguro del
-  /// dispositivo. No es un secreto: es solo el nombre de la entrada.
-  static const String apiKeyStorageKey = 'watap.steam.webapi.key';
 
   /// Nombre de la entrada del `webapi_token` de Steam en el almacén seguro.
   ///
@@ -59,11 +46,11 @@ class AppConstants {
   /// Tiempo máximo por solicitud HTTPS.
   static const Duration requestTimeout = Duration(seconds: 15);
 
-  /// Solicitudes simultáneas máximas contra la Steam Web API.
+  /// Límite de solicitudes simultáneas contra la Steam Web API.
+  ///
+  /// Steam admite como máximo 100 SteamID64 por llamada en los endpoints por
+  /// lote; WATAP consulta los perfiles de forma individual (XML público).
   static const int maxConcurrentRequests = 3;
-
-  /// Límite documentado de la API para listas de SteamID64 en una sola llamada.
-  static const int maxSteamIdsPerBatch = 100;
 
   /// Reintentos adicionales ante errores transitorios (5xx / red).
   static const int maxTransientRetries = 1;

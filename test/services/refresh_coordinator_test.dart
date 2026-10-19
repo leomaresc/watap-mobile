@@ -1,10 +1,9 @@
 /// Pruebas del coordinador de actualizaciones.
 ///
 /// Ninguna prueba realiza llamadas reales: el cliente HTTP está simulado y la
-/// base de datos es SQLite en memoria.
+/// base de datos es SQLite en memoria. La única credencial simulada es el
+/// token de sesión; los perfiles públicos se leen del XML de Steam Community.
 library;
-
-import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -17,7 +16,7 @@ import 'package:watap_mobile/services/refresh_coordinator.dart';
 
 import '../helpers/test_support.dart';
 
-const String _key = 'clave-de-prueba-1234567890abcdef';
+const String _token = 'tok-de-prueba-9';
 const String _id = '76561198000000000';
 
 const String _recentJson =
@@ -25,32 +24,32 @@ const String _recentJson =
     '"playtime_2weeks":100,"playtime_forever":1000}]}}';
 const String _emptyRecentJson = '{"response":{"total_count":0,"games":[]}}';
 
-/// Respuesta de `GetPlayerSummaries` que refleja los identificadores pedidos.
-http.Response _summaries(http.Request request, {int visibility = 3}) {
-  final List<String> ids = (request.url.queryParameters['steamids'] ?? '')
-      .split(',')
-      .where((String s) => s.isNotEmpty)
-      .toList(growable: false);
-  return jsonResponse(
-    jsonEncode(<String, Object?>{
-      'response': <String, Object?>{
-        'players': ids
-            .map((String id) => <String, Object?>{
-                  'steamid': id,
-                  'personaname': 'Jugador $id',
-                  'communityvisibilitystate': visibility,
-                })
-            .toList(),
-      },
-    }),
+/// Respuesta del XML público de perfil, con nombre e visibilidad pedidos.
+///
+/// El identificador se lee de la ruta (`/profiles/{id}`).
+http.Response _profileXml(
+  http.Request request, {
+  int visibility = 3,
+  String namePrefix = 'Jugador',
+}) {
+  final String id = request.url.pathSegments.isEmpty
+      ? _id
+      : request.url.pathSegments.last;
+  return xmlResponse(
+    communityProfileXmlBody(
+      steamId64: id,
+      name: '$namePrefix $id',
+      visibilityState: visibility,
+    ),
   );
 }
 
-/// Enrutado por defecto: resúmenes públicos y un juego reciente.
+/// Enrutado por defecto: perfil público en XML y un juego reciente.
 http.Response _dispatch(http.Request request) {
-  final String path = request.url.path;
-  if (path.contains('GetPlayerSummaries')) return _summaries(request);
-  if (path.contains('GetRecentlyPlayedGames')) return jsonResponse(_recentJson);
+  if (request.url.host == 'steamcommunity.com') return _profileXml(request);
+  if (request.url.path.contains('GetRecentlyPlayedGames')) {
+    return jsonResponse(_recentJson);
+  }
   return jsonResponse('{}');
 }
 
@@ -80,8 +79,7 @@ class _Env {
 
 Future<_Env> _env({
   FakeHttpClient? httpClient,
-  String? apiKey = _key,
-  String? steamToken,
+  String? steamToken = _token,
   int maxConcurrent = 3,
 }) async {
   final FakeHttpClient fake = httpClient ?? FakeHttpClient(_dispatch);
@@ -93,7 +91,6 @@ Future<_Env> _env({
     timeout: const Duration(seconds: 5),
     maxTransientRetries: 0,
   );
-  client.setApiKey(apiKey);
   client.setAccessToken(steamToken);
   final RefreshCoordinator coordinator = RefreshCoordinator(
     api: client,
@@ -117,8 +114,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   initTestDatabaseFactory();
 
-  test('sin clave configurada se informa y no se llama a la red', () async {
-    final _Env env = await _env(apiKey: null);
+  test('sin sesión configurada se informa y no se llama a la red', () async {
+    final _Env env = await _env(steamToken: null);
     addTearDown(env.dispose);
     final Profile profile = _profile(_id);
     await env.profiles.upsert(profile);
@@ -140,13 +137,15 @@ void main() {
     expect(result.status, FetchStatus.ok);
     expect(result.games.single.appId, 570);
     expect(env.fake.callCount, 2);
-    // El nombre público se actualiza en el perfil almacenado.
+    // El nombre público del XML se actualiza en el perfil almacenado.
     expect((await env.profiles.findById(_id))!.personaName, 'Jugador $_id');
   });
 
   test('un perfil privado no consulta los juegos recientes', () async {
     final _Env env = await _env(
-      httpClient: FakeHttpClient((http.Request r) => _summaries(r, visibility: 1)),
+      httpClient: FakeHttpClient(
+        (http.Request r) => _profileXml(r, visibility: 1),
+      ),
     );
     addTearDown(env.dispose);
     final Profile profile = _profile(_id);
@@ -161,8 +160,8 @@ void main() {
   test('una respuesta válida sin juegos se marca como noRecentGames', () async {
     final _Env env = await _env(
       httpClient: FakeHttpClient(
-        (http.Request r) => r.url.path.contains('GetPlayerSummaries')
-            ? _summaries(r)
+        (http.Request r) => r.url.host == 'steamcommunity.com'
+            ? _profileXml(r)
             : jsonResponse(_emptyRecentJson),
       ),
     );
@@ -179,7 +178,7 @@ void main() {
   test('un SteamID64 desconocido se marca como perfil no válido', () async {
     final _Env env = await _env(
       httpClient: FakeHttpClient(
-        (http.Request _) => jsonResponse('{"response":{"players":[]}}'),
+        (http.Request _) => xmlResponse(communityProfileNotFoundXml),
       ),
     );
     addTearDown(env.dispose);
@@ -191,31 +190,8 @@ void main() {
     expect(result.status, FetchStatus.invalidProfile);
   });
 
-  // --- Modo sin clave (solo token de sesión) --------------------------------
-
-  /// Enrutado de un entorno sin clave: el XML público responde con el nombre
-  /// y la actividad con un juego.
-  http.Response tokenModeDispatch(http.Request request) {
-    if (request.url.host == 'steamcommunity.com') {
-      return xmlResponse(communityProfileXmlBody(
-        steamId64: _id,
-        name: 'Ana',
-        visibilityState: 3,
-      ));
-    }
-    if (request.url.path.contains('GetRecentlyPlayedGames')) {
-      return jsonResponse(_recentJson);
-    }
-    return jsonResponse('{}');
-  }
-
-  test('sin clave, nombre y visibilidad vienen del XML público y hay juegos',
-      () async {
-    final _Env env = await _env(
-      apiKey: null,
-      steamToken: 'tok-de-prueba-9',
-      httpClient: FakeHttpClient(tokenModeDispatch),
-    );
+  test('nombre y visibilidad vienen del XML público y hay juegos', () async {
+    final _Env env = await _env(httpClient: FakeHttpClient(_dispatch));
     addTearDown(env.dispose);
     final Profile profile = _profile(_id);
     await env.profiles.upsert(profile);
@@ -223,9 +199,9 @@ void main() {
     final ProfileActivity result = await env.coordinator.refreshProfile(profile);
 
     expect(result.status, FetchStatus.ok);
-    expect(result.personaName, 'Ana');
+    expect(result.personaName, 'Jugador $_id');
     expect(result.games.single.appId, 570);
-    expect((await env.profiles.findById(_id))!.personaName, 'Ana',
+    expect((await env.profiles.findById(_id))!.personaName, 'Jugador $_id',
         reason: 'El nombre del XML se guarda en el perfil.');
     // El token jamás viaja a steamcommunity.com.
     for (final RecordedRequest r in env.fake.requests) {
@@ -235,11 +211,8 @@ void main() {
     }
   });
 
-  test('sin clave, un perfil privado según el XML no consulta los juegos',
-      () async {
+  test('un perfil privado según el XML no consulta los juegos', () async {
     final _Env env = await _env(
-      apiKey: null,
-      steamToken: 'tok-de-prueba-9',
       httpClient: FakeHttpClient(
         (http.Request request) => request.url.host == 'steamcommunity.com'
             ? xmlResponse(communityProfileXmlBody(
@@ -257,11 +230,9 @@ void main() {
     expect(env.fake.requestsTo('GetRecentlyPlayedGames'), isEmpty);
   });
 
-  test('perfil público pero juegos rechazados sin clave: se informa con '
-      'honestidad en lugar de culpar solo a la privacidad', () async {
+  test('perfil público pero juegos rechazados: se informa con honestidad en '
+      'lugar de culpar solo a la privacidad', () async {
     final _Env env = await _env(
-      apiKey: null,
-      steamToken: 'tok-de-prueba-9',
       httpClient: FakeHttpClient(
         (http.Request request) => request.url.host == 'steamcommunity.com'
             ? xmlResponse(communityProfileXmlBody(steamId64: _id, name: 'Ana'))
@@ -275,14 +246,12 @@ void main() {
     final ProfileActivity result = await env.coordinator.refreshProfile(profile);
 
     expect(result.status, FetchStatus.incompleteConfiguration);
-    expect(result.statusMessage, contains('clave de Web API'));
+    expect(result.statusMessage, contains('Detalles del juego'));
+    expect(result.statusMessage, contains('Vuelve a conectar'));
   });
 
-  test('sin clave, un perfil inexistente en el XML se marca como no válido',
-      () async {
+  test('un perfil inexistente en el XML se marca como no válido', () async {
     final _Env env = await _env(
-      apiKey: null,
-      steamToken: 'tok-de-prueba-9',
       httpClient: FakeHttpClient(
         (http.Request _) => xmlResponse(communityProfileNotFoundXml),
       ),

@@ -107,10 +107,10 @@ class FamilyGroupSyncService {
         );
       }
 
-      final Map<String, SteamPlayerSummary> summaries =
-          await _loadSummaries(group.memberSteamIds);
+      final Map<String, SteamPlayerSummary> publicProfiles =
+          await _loadPublicProfiles(group.memberSteamIds);
 
-      return await _reconcile(group: group, summaries: summaries);
+      return await _reconcile(group: group, summaries: publicProfiles);
     } on SteamApiException catch (e) {
       return FamilySyncOutcome.failure(
         e.messageEs,
@@ -123,21 +123,23 @@ class FamilyGroupSyncService {
     }
   }
 
-  Future<Map<String, SteamPlayerSummary>> _loadSummaries(
+  /// Nombres y avatares de los integrantes, desde el XML público de perfil.
+  ///
+  /// Es un extra: si falla, se importan igualmente los integrantes y los
+  /// nombres se completarán al actualizar la actividad.
+  Future<Map<String, SteamPlayerSummary>> _loadPublicProfiles(
     List<String> steamIds,
   ) async {
-    if (!_api.hasSteamAuth || steamIds.isEmpty) {
+    if (!_api.hasAccessToken || steamIds.isEmpty) {
       return const <String, SteamPlayerSummary>{};
     }
     try {
-      final List<SteamPlayerSummary> summaries =
-          await _api.fetchPlayerSummaries(steamIds);
+      final List<SteamPlayerSummary> profiles =
+          await _api.fetchPublicProfiles(steamIds);
       return <String, SteamPlayerSummary>{
-        for (final SteamPlayerSummary s in summaries) s.steamId64: s,
+        for (final SteamPlayerSummary s in profiles) s.steamId64: s,
       };
     } on SteamApiException {
-      // Los nombres y avatares son un extra: se importan igualmente los
-      // integrantes y se completarán al actualizar la actividad.
       return const <String, SteamPlayerSummary>{};
     }
   }

@@ -178,9 +178,9 @@ class _AddEditProfileScreenState extends State<AddEditProfileScreen> {
               const SizedBox(height: 10),
               if (!controller.hasSteamAuth)
                 const InlineNotice(
-                  message: 'Sin credencial de Steam solo se puede guardar el '
+                  message: 'Sin conexión con Steam solo se puede guardar el '
                       'perfil: el nombre y la actividad se obtendrán cuando '
-                      'conectes tu Steam o guardes una clave en Ajustes.',
+                      'conectes tu cuenta en Ajustes.',
                   icon: Icons.key_off_outlined,
                   color: WatapColors.warning,
                 ),

@@ -5,9 +5,9 @@
 /// código nunca la ve ni la guarda.
 ///
 /// Después del inicio de sesión, Steam redirige a un endpoint que devuelve JSON
-/// con un `webapi_token` temporal. Ese token es lo que permite leer el grupo
-/// familiar (`IFamilyGroupsService`), que **no** funciona con la clave de Web
-/// API.
+/// con un `webapi_token` temporal. Ese token es la **única credencial** de la
+/// app: permite leer el grupo familiar (`IFamilyGroupsService`) y la actividad
+/// reciente.
 ///
 /// El token se guarda en el almacenamiento seguro del dispositivo y se usa para
 /// sincronizar los integrantes.

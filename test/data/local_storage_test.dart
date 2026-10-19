@@ -1,5 +1,5 @@
 /// Pruebas del almacenamiento local: persistencia, política de caché,
-/// migraciones del esquema y aislamiento de la clave de API.
+/// migraciones del esquema y aislamiento de credenciales.
 library;
 
 import 'dart:io';
@@ -13,7 +13,6 @@ import 'package:watap_mobile/data/local/database_migrations.dart';
 import 'package:watap_mobile/data/repositories/activity_repository.dart';
 import 'package:watap_mobile/data/repositories/preferences_repository.dart';
 import 'package:watap_mobile/data/repositories/profiles_repository.dart';
-import 'package:watap_mobile/state/app_controller.dart';
 
 import '../helpers/test_support.dart';
 
@@ -39,7 +38,7 @@ Future<void> _expectKeyAbsentFromDatabase(AppDatabase db, String secret) async {
         expect(
           '$value',
           isNot(contains(secret)),
-          reason: 'La clave apareció en la tabla $table',
+          reason: 'La credencial apareció en la tabla $table',
         );
       }
     }
@@ -283,18 +282,17 @@ void main() {
     });
   });
 
-  group('aislamiento de la clave de API', () {
-    test('la clave va al almacén seguro y no a la base de datos', () async {
-      const String secret = 'clave-secreta-para-la-prueba-0001';
-      final TestEnvironment environment =
-          await buildTestEnvironment(httpClient: FakeHttpClient((_) => jsonResponse('{}')));
+  group('aislamiento de credenciales', () {
+    test('el token va al almacén seguro y no a la base de datos', () async {
+      const String secret = 'token-secreto-para-la-prueba-0001';
+      final TestEnvironment environment = await buildTestEnvironment(
+        httpClient: FakeHttpClient((_) => jsonResponse('{}')),
+        steamToken: secret,
+      );
       addTearDown(environment.dispose);
 
-      final OperationResult result = await environment.controller.saveApiKey(secret);
-
-      expect(result.success, isTrue);
-      expect(environment.controller.hasApiKey, isTrue);
-      expect(await environment.keyStore.loadApiKey(), secret);
+      expect(environment.controller.hasFamilyToken, isTrue);
+      expect(await environment.tokenStore.load(), secret);
       await _expectKeyAbsentFromDatabase(environment.database, secret);
     });
   });

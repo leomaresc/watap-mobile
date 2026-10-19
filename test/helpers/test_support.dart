@@ -13,7 +13,6 @@ import 'package:http/testing.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:watap_mobile/app.dart';
 import 'package:watap_mobile/data/local/app_database.dart';
-import 'package:watap_mobile/data/local/secure_api_key_store.dart';
 import 'package:watap_mobile/data/local/steam_token_store.dart';
 import 'package:watap_mobile/data/repositories/activity_repository.dart';
 import 'package:watap_mobile/data/repositories/preferences_repository.dart';
@@ -50,18 +49,18 @@ class RecordedRequest {
   /// Cuerpo de la solicitud (formularios `POST`).
   String get body => request.body;
 
-  String? get apiKeyHeader =>
-      request.headers[SteamApiHeaderNames.headerName] ?? request.headers['x-webapi-key'];
+  /// Encabezado de clave de Web API: WATAP **no** lo envía nunca (las
+  /// pruebas lo comprueban para garantizarlo).
+  String? get apiKeyHeader => request.headers['x-webapi-key'];
 
+  /// `key` en la URL: WATAP **nunca** envía la credencial como parámetro
+  /// `key` (el token viaja como `access_token`).
   bool get hasKeyInUrl =>
       request.url.queryParameters.containsKey('key');
-}
 
-/// Nombres de encabezado usados en las pruebas.
-class SteamApiHeaderNames {
-  const SteamApiHeaderNames._();
-
-  static const String headerName = 'x-webapi-key';
+  /// `access_token` presente en la URL de la solicitud.
+  bool get hasAccessTokenInUrl =>
+      request.url.queryParameters.containsKey('access_token');
 }
 
 /// Cliente HTTP simulado que registra las peticiones y permite controlar
@@ -155,7 +154,6 @@ class TestEnvironment {
     required this.httpClient,
     required this.activityRepository,
     required this.profilesRepository,
-    required this.keyStore,
     required this.tokenStore,
     required this.familyGroupsClient,
   });
@@ -166,7 +164,6 @@ class TestEnvironment {
   final FakeHttpClient httpClient;
   final ActivityRepository activityRepository;
   final ProfilesRepository profilesRepository;
-  final ApiKeyStore keyStore;
   final SteamTokenStore tokenStore;
   final FamilyGroupsClient familyGroupsClient;
 
@@ -177,9 +174,11 @@ class TestEnvironment {
 }
 
 /// Construye un entorno completo de prueba.
+///
+/// [steamToken] simula el `webapi_token` guardado tras iniciar sesión: es la
+/// única credencial de la aplicación.
 Future<TestEnvironment> buildTestEnvironment({
   required FakeHttpClient httpClient,
-  String? apiKey,
   String? steamToken,
   Duration timeout = const Duration(seconds: 2),
   int maxConcurrentRequests = 3,
@@ -191,14 +190,12 @@ Future<TestEnvironment> buildTestEnvironment({
     maxConcurrentRequests: maxConcurrentRequests,
     maxTransientRetries: 0,
   );
-  client.setApiKey(apiKey);
 
   final ProfilesRepository profilesRepository = ProfilesRepository(database);
   final ActivityRepository activityRepository = ActivityRepository(database);
   final PreferencesRepository preferencesRepository =
       PreferencesRepository(database);
 
-  final ApiKeyStore keyStore = InMemoryApiKeyStore(apiKey);
   final SteamTokenStore tokenStore = InMemorySteamTokenStore(steamToken);
   final FamilyGroupsClient familyGroupsClient = FamilyGroupsClient(
     httpClient: httpClient.build(),
@@ -222,7 +219,6 @@ Future<TestEnvironment> buildTestEnvironment({
     profilesRepository: profilesRepository,
     activityRepository: activityRepository,
     preferencesRepository: preferencesRepository,
-    apiKeyStore: keyStore,
     tokenStore: tokenStore,
     apiClient: client,
     familyGroupsClient: familyGroupsClient,
@@ -238,7 +234,6 @@ Future<TestEnvironment> buildTestEnvironment({
     httpClient: httpClient,
     activityRepository: activityRepository,
     profilesRepository: profilesRepository,
-    keyStore: keyStore,
     tokenStore: tokenStore,
     familyGroupsClient: familyGroupsClient,
   );

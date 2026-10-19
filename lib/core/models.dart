@@ -41,9 +41,6 @@ enum FetchStatus {
   /// No fue posible completar la consulta por un problema de red o tiempo de espera.
   networkError,
 
-  /// La respuesta permite identificar realmente una clave inválida.
-  invalidApiKey,
-
   /// La entrada del perfil es incorrecta o Steam confirma que no puede resolverse.
   invalidProfile,
 
@@ -53,7 +50,7 @@ enum FetchStatus {
   /// La respuesta llegó con formato inesperado o JSON inválido.
   malformedResponse,
 
-  /// Falta configuración necesaria (por ejemplo, la clave de API).
+  /// Falta la sesión de Steam (hay que conectar la cuenta).
   incompleteConfiguration;
 
   /// `true` si el estado representa una respuesta que Steam sí ha entregado.
@@ -67,9 +64,10 @@ enum FetchStatus {
   bool get isFailure => !isAnswered;
 }
 
-/// Resumen de un perfil de Steam tal como lo devuelve `GetPlayerSummaries`.
+/// Datos públicos de un perfil de Steam: nombre, avatar y visibilidad.
 ///
-/// No implica autenticación: es información pública del perfil.
+/// WATAP los obtiene del XML público de perfil de Steam Community (sin
+/// credenciales). No implica autenticación: es información pública.
 class SteamPlayerSummary {
   const SteamPlayerSummary({
     required this.steamId64,
@@ -111,9 +109,8 @@ class VanityResolution {
 
 /// Respuesta de `IFamilyGroupsService/GetFamilyGroupForUser`.
 ///
-/// Con los tokens de acceso de la sesión de Steam (jamás con la clave de Web
-/// API). Si la cuenta no pertenece a ningún grupo, Steam responde sin
-/// `family_groupid`.
+/// Se consulta con el token de acceso de la sesión de Steam. Si la cuenta no
+/// pertenece a ningún grupo, Steam responde sin `family_groupid`.
 class FamilyGroupForUser {
   const FamilyGroupForUser({required this.familyGroupId});
 

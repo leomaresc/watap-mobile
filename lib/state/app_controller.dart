@@ -15,7 +15,6 @@ import '../core/models.dart';
 import '../core/validators.dart';
 import '../data/local/app_database.dart';
 import '../data/local/image_cache_service.dart';
-import '../data/local/secure_api_key_store.dart';
 import '../data/local/steam_token_store.dart';
 import '../data/repositories/activity_repository.dart';
 import '../data/repositories/preferences_repository.dart';
@@ -38,7 +37,7 @@ enum AppSection {
   /// Integrantes supervisados.
   members,
 
-  /// Clave de API, preferencias, caché y privacidad.
+  /// Conexión con Steam, preferencias, caché y privacidad.
   settings;
 
   static AppSection fromName(String? name) {
@@ -99,7 +98,6 @@ class AppController extends ChangeNotifier {
     required ProfilesRepository profilesRepository,
     required ActivityRepository activityRepository,
     required PreferencesRepository preferencesRepository,
-    required ApiKeyStore apiKeyStore,
     required SteamTokenStore tokenStore,
     required SteamApiClient apiClient,
     required FamilyGroupsClient familyGroupsClient,
@@ -110,7 +108,6 @@ class AppController extends ChangeNotifier {
         _profiles = profilesRepository,
         _activityRepo = activityRepository,
         _preferencesRepo = preferencesRepository,
-        _keyStore = apiKeyStore,
         _tokenStore = tokenStore,
         _api = apiClient,
         _groups = familyGroupsClient,
@@ -122,7 +119,6 @@ class AppController extends ChangeNotifier {
   final ProfilesRepository _profiles;
   final ActivityRepository _activityRepo;
   final PreferencesRepository _preferencesRepo;
-  final ApiKeyStore _keyStore;
   final SteamTokenStore _tokenStore;
   final SteamApiClient _api;
   final FamilyGroupsClient _groups;
@@ -134,7 +130,6 @@ class AppController extends ChangeNotifier {
 
   bool _initialized = false;
   String? _initializationError;
-  bool _hasApiKey = false;
   bool _hasFamilyToken = false;
   String? _familyGroupName;
   int? _lastFamilySyncUnix;
@@ -161,20 +156,15 @@ class AppController extends ChangeNotifier {
 
   String? get initializationError => _initializationError;
 
-  bool get hasApiKey => _hasApiKey;
-
-  /// `true` cuando hay un token de sesión de Steam guardado.
-  ///
-  /// Ese token es el que permite leer el grupo familiar; la clave de Web API no
-  /// sirve para eso.
+  /// `true` cuando hay un token de sesión de Steam guardado (inicio de sesión
+  /// realizado en el WebView).
   bool get hasFamilyToken => _hasFamilyToken;
 
-  /// `true` cuando la app dispone de alguna credencial para consultar Steam:
-  /// el token de sesión (conexión con Steam) o la clave de Web API.
+  /// `true` cuando la app dispone de una sesión de Steam para consultar datos.
   ///
-  /// Cualquiera de las dos basta para leer actividad y resúmenes; solo el
-  /// token permite además leer el grupo familiar.
-  bool get hasSteamAuth => _hasApiKey || _hasFamilyToken;
+  /// La única vía es iniciar sesión (token de sesión); con él se leen el grupo
+  /// familiar, los perfiles públicos y la actividad.
+  bool get hasSteamAuth => _hasFamilyToken;
 
   /// Nombre del grupo familiar, en la última sincronización correcta.
   String? get familyGroupName => _familyGroupName;
@@ -186,11 +176,11 @@ class AppController extends ChangeNotifier {
 
   /// `true` cuando la aplicación tiene todo lo necesario para funcionar.
   ///
-  /// Basta con haber conectado Steam (token) o guardado una clave de Web API,
-  /// o haber omitido explícitamente el paso de conexión, para no bloquear la
-  /// aplicación si la página de Steam no carga.
+  /// Basta con haber conectado Steam (token) o haber omitido explícitamente el
+  /// paso de conexión, para no bloquear la aplicación si la página de Steam no
+  /// carga.
   bool get onboardingComplete =>
-      _hasFamilyToken || _hasApiKey || _preferences.familySetupDone;
+      _hasFamilyToken || _preferences.familySetupDone;
 
   Preferences get preferences => _preferences;
 
@@ -317,8 +307,6 @@ class AppController extends ChangeNotifier {
   Future<void> initialize() async {
     try {
       _preferences = await _preferencesRepo.load();
-      _hasApiKey = await _keyStore.hasApiKey();
-      _api.setApiKey(_hasApiKey ? await _keyStore.loadApiKey() : null);
       final String? steamToken = await _tokenStore.load();
       _hasFamilyToken = steamToken != null;
       _api.setAccessToken(steamToken);
@@ -471,8 +459,7 @@ class AppController extends ChangeNotifier {
         added: 0,
         skipped: 0,
         failed: 0,
-        messageEs: 'Conecta tu Steam o guarda una clave de Steam Web API para '
-            'importar integrantes.',
+        messageEs: 'Conecta tu cuenta de Steam para importar integrantes.',
         isError: true,
       );
     }
@@ -535,11 +522,11 @@ class AppController extends ChangeNotifier {
       added++;
     }
 
-    // Se obtienen nombres y avatares en lote.
+    // Se obtienen nombres y avatares desde el XML público de perfil.
     try {
-      final List<SteamPlayerSummary> summaries =
-          await _api.fetchPlayerSummaries(parsedIds);
-      for (final SteamPlayerSummary s in summaries) {
+      final List<SteamPlayerSummary> publicProfiles =
+          await _api.fetchPublicProfiles(parsedIds);
+      for (final SteamPlayerSummary s in publicProfiles) {
         await _profiles.applySummary(s);
       }
     } on SteamApiException {
@@ -574,8 +561,8 @@ class AppController extends ChangeNotifier {
     } else {
       if (!hasSteamAuth) {
         return const OperationResult.error(
-          'Para resolver un nombre personalizado hace falta conectar tu Steam '
-          'o guardar una clave de Steam Web API.',
+          'Para resolver un nombre personalizado hace falta conectar tu '
+          'cuenta de Steam.',
         );
       }
       try {
@@ -600,11 +587,11 @@ class AppController extends ChangeNotifier {
     String? avatarUrl;
     if (hasSteamAuth) {
       try {
-        final List<SteamPlayerSummary> summaries =
-            await _api.fetchPlayerSummaries(<String>[steamId64]);
-        if (summaries.isNotEmpty) {
-          personaName = summaries.first.personaName;
-          avatarUrl = summaries.first.avatarUrl;
+        final List<SteamPlayerSummary> profiles =
+            await _api.fetchPublicProfiles(<String>[steamId64]);
+        if (profiles.isNotEmpty) {
+          personaName = profiles.first.personaName;
+          avatarUrl = profiles.first.avatarUrl;
         }
       } on SteamApiException {
         // Se añade sin nombre; se completará al actualizar.
@@ -736,36 +723,6 @@ class AppController extends ChangeNotifier {
       _refreshingAll = false;
       _notify();
     }
-  }
-
-  // --- Clave de API ---------------------------------------------------------
-
-  /// Guarda la clave en el almacenamiento seguro.
-  Future<OperationResult> saveApiKey(String apiKey) async {
-    final String? formatError = validateApiKeyFormat(apiKey);
-    if (formatError != null) return OperationResult.error(formatError);
-
-    await _keyStore.saveApiKey(apiKey);
-    _api.setApiKey(await _keyStore.loadApiKey());
-    _hasApiKey = await _keyStore.hasApiKey();
-    _notify();
-    return const OperationResult.ok(
-      'Clave guardada en el almacenamiento seguro del dispositivo.',
-    );
-  }
-
-  /// Elimina la clave del almacenamiento seguro.
-  Future<OperationResult> deleteApiKey() async {
-    await _keyStore.deleteApiKey();
-    _api.setApiKey(null);
-    _hasApiKey = false;
-    _notify();
-    return const OperationResult.ok('Clave eliminada del dispositivo.');
-  }
-
-  /// Comprueba si la clave configurada es aceptada por Steam.
-  Future<ApiKeyCheckResult> verifyApiKey() {
-    return _api.verifyApiKey();
   }
 
   // --- Preferencias y caché -------------------------------------------------

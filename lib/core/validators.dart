@@ -198,20 +198,3 @@ String? validateActivityThresholds(int moderate, int high) {
   return null;
 }
 
-/// Valida el formato general de una clave de Steam Web API.
-///
-/// Steam no documenta la longitud exacta de sus claves, así que solo se
-/// comprueban signos evidentes de error (cadena vacía, espacios, longitud
-/// absurda). La validez real se determina consultando la API.
-String? validateApiKeyFormat(String? key) {
-  if (key == null) return null;
-  final String value = key.trim();
-  if (value.isEmpty) return 'La clave de API no puede estar vacía.';
-  if (value.length < 16) return 'La clave parece demasiado corta para ser válida.';
-  if (value.length > 128) return 'La clave parece demasiado larga para ser válida.';
-  if (value.contains(RegExp(r'\s'))) {
-    return 'La clave no debe contener espacios ni saltos de línea.';
-  }
-  return null;
-}
-

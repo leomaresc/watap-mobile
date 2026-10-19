@@ -1,10 +1,8 @@
 /// Construcción de las URLs utilizadas por WATAP Mobile.
 ///
 /// Solo se emplean endpoints públicos de Valve: la Steam Web API, el XML
-/// público de perfil de Steam Community y el CDN público de imágenes.
-/// **Ninguna URL contiene la clave de API**: la clave viaja en el encabezado
-/// `x-webapi-key` (ver `SteamApiClient`), de modo que no aparece en rutas,
-/// cachés intermedias ni registros.
+/// público de perfil de Steam Community y el CDN público de imágenes. **Ninguna
+/// URL contiene credenciales por sí misma.**
 ///
 /// El `access_token` de sesión sí viaja como parámetro de la URL — Steam exige
 /// `GET` y esa es la forma en que la propia web de Steam lo envía. Va siempre
@@ -17,7 +15,7 @@ library;
 
 import '../../core/constants.dart';
 
-/// Rutas de los endpoints documentados utilizados.
+/// Rutas de los endpoints utilizados.
 class SteamApiEndpoints {
   const SteamApiEndpoints._();
 
@@ -25,16 +23,10 @@ class SteamApiEndpoints {
   static const String recentlyPlayed =
       '/IPlayerService/GetRecentlyPlayedGames/v1/';
 
-  /// Resúmenes públicos de perfiles (nombre y avatar).
-  static const String playerSummaries = '/ISteamUser/GetPlayerSummaries/v2/';
-
-  /// Resolución de un nombre personalizado a SteamID64.
-  static const String resolveVanityUrl = '/ISteamUser/ResolveVanityURL/v1/';
-
   /// Grupo familiar de la cuenta autenticada.
   ///
   /// Endpoint **interno** (sin documentación pública de Valve): solo acepta un
-  /// `access_token` de sesión de Steam, nunca una clave de Web API.
+  /// `access_token` de sesión de Steam.
   static const String familyGroupForUser =
       '/IFamilyGroupsService/GetFamilyGroupForUser/v1/';
 
@@ -63,12 +55,13 @@ class SteamApiUrls {
     );
   }
 
-  /// XML público del perfil de Steam Community (fuente sin credenciales).
+  /// XML público del perfil de Steam Community (fuente de nombre, avatar y
+  /// visibilidad, **sin credenciales**).
   ///
   /// Steam Community publica el XML oficial de un perfil bajo
   /// `https://steamcommunity.com/profiles/{id}?xml=1`: datos estructurados,
-  /// nunca HTML. WATAP lo consulta **solo cuando no hay clave de Web API** y
-  /// **sin ninguna credencial** (el token jamás se envía a este host).
+  /// nunca HTML. (`ISteamUser/GetPlayerSummaries` exige una clave de Web API
+  /// que WATAP no usa.)
   static Uri communityProfileXml(String steamId64) {
     return Uri.https(
       AppConstants.steamCommunityHost,
@@ -79,41 +72,14 @@ class SteamApiUrls {
 
   /// XML público del perfil asociado a un nombre personalizado (vanity).
   ///
-  /// Permite resolver `steamcommunity.com/id/ejemplo` a SteamID64 sin clave:
-  /// si no existe, Steam responde `<response><error>…</error></response>`.
+  /// Permite resolver `steamcommunity.com/id/ejemplo` a SteamID64 sin
+  /// credencial: si no existe, Steam responde
+  /// `<response><error>…</error></response>`.
   static Uri communityVanityProfileXml(String vanity) {
     return Uri.https(
       AppConstants.steamCommunityHost,
       '/id/${vanity.trim()}',
       <String, String>{'xml': '1'},
-    );
-  }
-
-  /// `ISteamUser/GetPlayerSummaries/v2`
-  ///
-  /// Steam admite como máximo 100 SteamID64 por llamada; el llamador debe
-  /// trocear la lista (ver `SteamApiClient.fetchPlayerSummaries`).
-  static Uri playerSummaries(List<String> steamId64s) {
-    final List<String> ids = steamId64s
-        .map((String id) => id.trim())
-        .where((String id) => id.isNotEmpty)
-        .take(AppConstants.maxSteamIdsPerBatch)
-        .toList(growable: false);
-    return Uri.parse('$_apiBase${SteamApiEndpoints.playerSummaries}').replace(
-      queryParameters: <String, String>{
-        'steamids': ids.join(','),
-        'format': 'json',
-      },
-    );
-  }
-
-  /// `ISteamUser/ResolveVanityURL/v1`
-  static Uri resolveVanityUrl(String vanityUrl) {
-    return Uri.parse('$_apiBase${SteamApiEndpoints.resolveVanityUrl}').replace(
-      queryParameters: <String, String>{
-        'vanityurl': vanityUrl.trim(),
-        'format': 'json',
-      },
     );
   }
 
@@ -172,8 +138,4 @@ class SteamApiUrls {
   /// Perfil público de Steam a partir del nombre personalizado.
   static Uri communityVanity(String vanity) =>
       Uri.parse('${AppConstants.steamCommunityBaseUrl}/id/$vanity');
-
-  /// Página oficial para solicitar una clave de Steam Web API.
-  static Uri apiKeyRegistration() =>
-      Uri.parse(AppConstants.steamApiKeyRegistrationUrl);
 }

@@ -17,9 +17,6 @@ enum SteamApiErrorKind {
   /// HTTP 429: se alcanzó el límite de solicitudes.
   rateLimited,
 
-  /// La respuesta permite identificar realmente una clave inválida.
-  invalidApiKey,
-
   /// Acceso denegado o datos no disponibles por privacidad.
   privateOrUnavailable,
 
@@ -32,7 +29,7 @@ enum SteamApiErrorKind {
   /// Otro código HTTP no contemplado.
   http,
 
-  /// Falta configuración (por ejemplo, la clave de API).
+  /// Falta la sesión de Steam (conexión con la cuenta).
   incompleteConfiguration,
 
   /// Credenciales de sesión rechazadas (token de Steam caducado o inválido).
@@ -47,7 +44,7 @@ enum SteamApiErrorKind {
 
 /// Excepción interna de la capa de datos de Steam.
 ///
-/// Nunca contiene la clave de API ni el cuerpo completo de una respuesta
+/// Nunca contiene el token de sesión ni el cuerpo completo de una respuesta
 /// potencialmente sensible: solo el mensaje y el código de estado.
 class SteamApiException implements Exception {
   const SteamApiException({
@@ -64,7 +61,7 @@ class SteamApiException implements Exception {
   final int? statusCode;
   final Duration? retryAfter;
 
-  /// Ruta del endpoint invocado (sin la clave de API).
+  /// Ruta del endpoint invocado (sin credenciales).
   final String? endpoint;
 
   final String? technicalDetail;
@@ -89,7 +86,6 @@ FetchStatus fetchStatusForSteamError(SteamApiErrorKind kind) => switch (kind) {
       SteamApiErrorKind.network => FetchStatus.networkError,
       SteamApiErrorKind.timeout => FetchStatus.networkError,
       SteamApiErrorKind.rateLimited => FetchStatus.rateLimited,
-      SteamApiErrorKind.invalidApiKey => FetchStatus.invalidApiKey,
       SteamApiErrorKind.privateOrUnavailable => FetchStatus.privateOrUnavailable,
       SteamApiErrorKind.invalidProfile => FetchStatus.invalidProfile,
       SteamApiErrorKind.malformedResponse => FetchStatus.malformedResponse,
@@ -109,8 +105,6 @@ String defaultSteamErrorMessage(SteamApiErrorKind kind) => switch (kind) {
         'Steam tardó demasiado en responder. Vuelve a intentarlo.',
       SteamApiErrorKind.rateLimited =>
         'Steam ha limitado las solicitudes (error 429). Espera unos minutos antes de volver a actualizar.',
-      SteamApiErrorKind.invalidApiKey =>
-        'Steam ha rechazado la clave de Web API configurada.',
       SteamApiErrorKind.privateOrUnavailable =>
         'Steam no ha entregado los datos: el perfil es privado o sus detalles de juego están restringidos.',
       SteamApiErrorKind.invalidProfile =>
@@ -120,7 +114,7 @@ String defaultSteamErrorMessage(SteamApiErrorKind kind) => switch (kind) {
       SteamApiErrorKind.http =>
         'Steam devolvió una respuesta inesperada.',
       SteamApiErrorKind.incompleteConfiguration =>
-        'Falta configurar la clave de Steam Web API.',
+        'Conecta tu cuenta de Steam para consultar estos datos.',
       SteamApiErrorKind.invalidCredentials =>
         'La sesión de Steam no es válida o ha caducado. Conecta tu cuenta de '
         'nuevo para obtener un token actualizado.',

@@ -1,7 +1,8 @@
 /// Punto de entrada de WATAP Mobile.
 ///
-/// No se incluye ninguna clave de API. La clave la introduce cada usuario y se
-/// guarda en el almacenamiento seguro del dispositivo.
+/// No se incluye ninguna credencial. La única credencial es el token de sesión
+/// de Steam, que cada usuario obtiene iniciando sesión y se guarda en el
+/// almacenamiento seguro del dispositivo.
 library;
 
 import 'package:flutter/material.dart';

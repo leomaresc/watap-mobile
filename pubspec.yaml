@@ -3,7 +3,7 @@ description: >-
   WATAP Mobile (What Are They Actually Playing?) — consulta y compara la
   actividad reciente de varios perfiles de Steam desde el móvil.
 publish_to: "none"
-version: 1.4.1+5
+version: 1.5.0+6
 
 environment:
   sdk: ^3.9.0

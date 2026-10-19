@@ -6,10 +6,9 @@
 ///   integrantes solos;
 /// - consulta la actividad de cada uno (`GetRecentlyPlayedGames`).
 ///
-/// No se pide una clave de Web API ni enlaces manuales. Por eso se ofrece la
-/// clave únicamente como **respaldo** (si la página de Steam no carga), y un
-/// botón para omitir el paso de forma explícita: la aplicación nunca debe
-/// quedar bloqueada.
+/// Esa conexión es la **única** vía de autenticación (no hay claves de API).
+/// Se ofrece un botón para omitir el paso de forma explícita: la aplicación
+/// nunca debe quedar bloqueada si la página de Steam no carga.
 library;
 
 import 'package:flutter/material.dart';
@@ -18,7 +17,6 @@ import '../../core/constants.dart';
 import '../../state/app_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/loading_state.dart';
-import '../settings/api_key_screen.dart';
 import 'steam_connect_screen.dart';
 
 /// Pantalla de configuración inicial.
@@ -29,7 +27,6 @@ class OnboardingScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppController controller = AppScope.of(context);
     final bool connected = controller.hasFamilyToken;
-    final bool hasKey = controller.hasApiKey;
 
     return Scaffold(
       appBar: AppBar(
@@ -67,11 +64,8 @@ class OnboardingScreen extends StatelessWidget {
                 'de la app. Tu contraseña va directamente a Valve: WATAP no la '
                 've ni la guarda. Después se leen tu familia y su actividad '
                 'con un token temporal.',
-            done: connected || hasKey,
-            doneText: connected
-                ? 'Conectado. Tu grupo familiar se puede sincronizar.'
-                : 'Clave de API guardada (modo respaldo). El grupo familiar '
-                    'se leerá cuando conectes Steam.',
+            done: connected,
+            doneText: 'Conectado. Tu grupo familiar se puede sincronizar.',
             pendingText: 'Pendiente de conexión.',
             actionLabel: connected ? 'Volver a conectar' : 'Conectar con Steam',
             onAction: () => Navigator.of(context).push(
@@ -101,15 +95,6 @@ class OnboardingScreen extends StatelessWidget {
               onPressed: () => _skip(context),
               icon: const Icon(Icons.skip_next, size: 18),
               label: const Text('Omitir el paso por ahora'),
-            ),
-            TextButton.icon(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (BuildContext _) => const ApiKeyScreen(),
-                ),
-              ),
-              icon: const Icon(Icons.key_outlined, size: 18),
-              label: const Text('¿No te funciona? Usar clave de Web API'),
             ),
           ],
           const SizedBox(height: 16),

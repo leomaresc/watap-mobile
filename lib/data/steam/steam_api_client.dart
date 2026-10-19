@@ -1,4 +1,4 @@
-/// Cliente HTTPS para la Steam Web API pública.
+/// Cliente HTTPS para los servicios de Steam usados por WATAP.
 ///
 /// Responsabilidades:
 /// - Exigir HTTPS en toda salida de red.
@@ -7,9 +7,16 @@
 /// - Distinguir errores de conexión, tiempo de espera y limitación de
 ///   solicitudes (HTTP 429, con `Retry-After` cuando Steam lo envía).
 /// - Limitar las solicitudes simultáneas y evitar duplicados en vuelo.
-/// - Enviar la credencial en el encabezado `x-webapi-key` (clave de Web API)
-///   o como parámetro `access_token` de la URL (token de sesión de Steam),
-///   según corresponda. Ninguna de las dos viaja nunca en un registro.
+///
+/// **Autenticación**: la única credencial es el `webapi_token` de la sesión de
+/// Steam (obtenido desde el WebView de inicio de sesión). Viaja como parámetro
+/// `access_token` de la URL, sobre una conexión HTTPS directa a
+/// `api.steampowered.com` (el mismo mecanismo que usa la propia web de Steam),
+/// y **jamás se envía a `steamcommunity.com`** ni se escribe en registros.
+///
+/// El nombre, el avatar y la visibilidad de los perfiles se leen del XML
+/// público de Steam Community (sin credencial), porque `ISteamUser` exige una
+/// clave de Web API que WATAP no usa.
 library;
 
 import 'dart:async';
@@ -25,52 +32,17 @@ import 'steam_api_errors.dart';
 import 'steam_api_urls.dart';
 import 'steam_json_parsers.dart';
 
-/// Resultado de comprobar la clave configurada.
-class ApiKeyCheckResult {
-  const ApiKeyCheckResult({
-    required this.keyAccepted,
-    required this.profileFound,
-    required this.messageEs,
-    this.technicalDetail,
-  });
-
-  /// `true` si Steam aceptó la clave, `false` si la rechazó, `null` si la
-  /// respuesta no permite determinarlo.
-  final bool? keyAccepted;
-
-  /// `true`/`false` si además se pudo comprobar el perfil indicado,
-  /// `null` si no se proporcionó ninguno o no se pudo determinar.
-  final bool? profileFound;
-
-  final String messageEs;
-
-  /// Detalle técnico sin secretos (código HTTP, endpoint…).
-  final String? technicalDetail;
-
-  bool get isConclusive => keyAccepted != null;
-}
-
 /// Política de interpretación de errores por endpoint.
 ///
 /// Steam no documenta de forma exhaustiva los códigos de error de cada
 /// endpoint, así que la interpretación se basa en la semántica documentada de
 /// cada operación. Cada decisión está razonada en el código.
 enum _EndpointPolicy {
-  /// `GetPlayerSummaries`: exige **clave** de Web API (un `access_token` no
-  /// sirve: Steam responde 400 «Required parameter 'key'»). Sin clave se usa
-  /// el XML público de Steam Community y este endpoint no se consulta. Con
-  /// clave, un 401/403 solo puede significar credencial rechazada.
-  summaries,
-
-  /// `GetRecentlyPlayedGames`: puede fallar por credencial o por privacidad.
-  /// Con clave se atribuye a privacidad (el flujo validó la clave antes con
-  /// `GetPlayerSummaries`). Con solo el token, `RefreshCoordinator` distingue
-  /// el caso de perfil público confirmado y lo informa con honestidad.
+  /// `GetRecentlyPlayedGames`: puede fallar por sesión rechazada o por
+  /// privacidad del perfil. Un 401/403 se atribuye a privacidad o datos no
+  /// disponibles; `RefreshCoordinator` distingue el caso de perfil público
+  /// confirmado y lo informa con honestidad.
   recentlyPlayed,
-
-  /// `ResolveVanityURL`: exige clave, igual que `summaries`. Sin clave se
-  /// resuelve con el XML público de Steam Community.
-  vanity,
 
   /// XML público de perfil en `steamcommunity.com`: **sin credenciales**. Un
   /// 401/403 ahí es un bloqueo del servidor, no un perfil inválido.
@@ -104,8 +76,6 @@ class SteamApiClient {
   final int _maxConcurrent;
   final int _maxRetries;
 
-  String? _apiKey;
-
   /// `webapi_token` de la sesión de Steam (obtenido desde el WebView).
   String? _accessToken;
 
@@ -119,40 +89,17 @@ class SteamApiClient {
   // --- Ventana de espera tras un HTTP 429 ----------------------------------
   DateTime? _rateLimitedUntil;
 
-  /// `true` cuando hay una clave configurada para esta sesión.
-  bool get hasApiKey => (_apiKey ?? '').trim().isNotEmpty;
-
   /// `true` cuando hay un token de sesión de Steam configurado.
   bool get hasAccessToken => (_accessToken ?? '').trim().isNotEmpty;
-
-  /// `true` cuando hay alguna credencial para consultar la Steam Web API.
-  ///
-  /// La clave de Web API es la vía documentada para los endpoints públicos y
-  /// se prefiere cuando existe. El token de sesión es la vía obligatoria para
-  /// `IFamilyGroupsService` y el respaldo para el resto cuando no hay clave.
-  bool get hasSteamAuth => hasApiKey || hasAccessToken;
-
-  /// `true` cuando las consultas se autenticarán con el token de sesión
-  /// porque no hay clave de Web API.
-  bool get _authenticatingByToken => !hasApiKey && hasAccessToken;
 
   /// Fecha hasta la que no se enviarán solicitudes por limitación del servidor.
   DateTime? get rateLimitedUntil => _rateLimitedUntil;
 
-  /// Configura la clave que se enviará en el encabezado `x-webapi-key`.
-  ///
-  /// Pasar `null` la elimina de memoria. La clave nunca se escribe en registros.
-  void setApiKey(String? apiKey) {
-    final String? value = apiKey?.trim();
-    _apiKey = (value == null || value.isEmpty) ? null : value;
-  }
-
   /// Configura el `webapi_token` de la sesión de Steam.
   ///
-  /// Cuando no hay clave, este token autentica las consultas como parámetro
-  /// `access_token` de la URL, sobre una conexión HTTPS directa a
-  /// `api.steampowered.com` (el mismo mecanismo que usa la propia web de
-  /// Steam). Nunca se escribe en registros ni en mensajes de error.
+  /// Este token autentica las consultas como parámetro `access_token` de la
+  /// URL, sobre una conexión HTTPS directa a `api.steampowered.com`. Nunca se
+  /// escribe en registros ni en mensajes de error.
   void setAccessToken(String? token) {
     final String? value = token?.trim();
     _accessToken = (value == null || value.isEmpty) ? null : value;
@@ -186,14 +133,16 @@ class SteamApiClient {
     return parseRecentlyPlayedGames(result.body);
   }
 
-  /// Consulta los resúmenes (nombre, avatar y visibilidad) de hasta 100
-  /// perfiles por lote.
+  /// Lee el nombre, el avatar y la visibilidad de los perfiles indicados.
   ///
-  /// Con clave de Web API usa `GetPlayerSummaries`. **Con solo el token de
-  /// sesión no se puede**: `ISteamUser` exige `key=` y responde HTTP 400, así
-  /// que en ese modo se lee el XML público de perfil de Steam Community (sin
-  /// credencial) y se devuelve exactamente el mismo modelo.
-  Future<List<SteamPlayerSummary>> fetchPlayerSummaries(
+  /// Fuente: el **XML público de perfil de Steam Community** (sin
+  /// credenciales). `ISteamUser/GetPlayerSummaries` exige una clave de Web API
+  /// —responde HTTP 400 con un token— y WATAP no usa ese servicio.
+  ///
+  /// Un perfil inexistente se omite del resultado (el llamador lo interpreta
+  /// como "perfil no encontrado"); un fallo de red o de parseo se propaga para
+  /// que se informe con su estado real en lugar de fingir que no existe.
+  Future<List<SteamPlayerSummary>> fetchPublicProfiles(
     List<String> steamId64s,
   ) async {
     final List<String> ids = steamId64s
@@ -203,44 +152,23 @@ class SteamApiClient {
         .toList(growable: false);
     if (ids.isEmpty) return const <SteamPlayerSummary>[];
 
-    if (!hasApiKey && hasAccessToken) {
-      final List<SteamPlayerSummary> viaXml = <SteamPlayerSummary>[];
-      for (final String id in ids) {
-        try {
-          viaXml.add(await _fetchCommunitySummary(id));
-        } on SteamApiException catch (e) {
-          // Un perfil inexistente se omite (el llamador muestra "no
-          // encontrado"); un fallo de red o de parseo se propaga para que se
-          // informe con su estado real en lugar de fingir que no existe.
-          if (e.kind == SteamApiErrorKind.invalidProfile) continue;
-          rethrow;
-        }
+    final List<SteamPlayerSummary> profiles = <SteamPlayerSummary>[];
+    for (final String id in ids) {
+      try {
+        profiles.add(await _fetchCommunityProfile(id));
+      } on SteamApiException catch (e) {
+        if (e.kind == SteamApiErrorKind.invalidProfile) continue;
+        rethrow;
       }
-      return viaXml;
     }
-
-    final List<SteamPlayerSummary> summaries = <SteamPlayerSummary>[];
-    for (int i = 0; i < ids.length; i += AppConstants.maxSteamIdsPerBatch) {
-      final int end = (i + AppConstants.maxSteamIdsPerBatch) > ids.length
-          ? ids.length
-          : i + AppConstants.maxSteamIdsPerBatch;
-      final List<String> batch = ids.sublist(i, end);
-      final Uri uri = SteamApiUrls.playerSummaries(batch);
-      final _HttpResult result = await _get(
-        uri,
-        policy: _EndpointPolicy.summaries,
-        requiresAuth: true,
-      );
-      summaries.addAll(parsePlayerSummaries(result.body));
-    }
-    return summaries;
+    return profiles;
   }
 
-  /// Lee un perfil público con el XML de Steam Community (modo sin clave).
+  /// Lee un perfil público con el XML de Steam Community.
   ///
   /// La petición **no lleva ninguna credencial**: el token jamás se envía a
   /// `steamcommunity.com`.
-  Future<SteamPlayerSummary> _fetchCommunitySummary(String steamId64) async {
+  Future<SteamPlayerSummary> _fetchCommunityProfile(String steamId64) async {
     final Uri uri = SteamApiUrls.communityProfileXml(steamId64);
     final _HttpResult result = await _get(
       uri,
@@ -270,25 +198,10 @@ class SteamApiClient {
 
   /// Resuelve un nombre personalizado de Steam a su SteamID64.
   ///
-  /// Con clave usa `ResolveVanityURL`. **Con solo el token no se puede**
-  /// (`ISteamUser` exige `key=`): en ese modo se consulta el XML público del
-  /// perfil en `steamcommunity.com/id/{nombre}` — si existe, trae su
-  /// `steamID64`; si no, Steam responde `<error>`.
+  /// Fuente: el XML público del perfil en `steamcommunity.com/id/{nombre}` —
+  /// si existe, trae su `steamID64`; si no, Steam responde `<error>`.
+  /// (`ResolveVanityURL` exige una clave de Web API, que WATAP no usa.)
   Future<VanityResolution> resolveVanityUrl(String vanity) async {
-    if (!hasApiKey && hasAccessToken) {
-      return _resolveVanityViaCommunityXml(vanity);
-    }
-    final Uri uri = SteamApiUrls.resolveVanityUrl(vanity);
-    final _HttpResult result = await _get(
-      uri,
-      policy: _EndpointPolicy.vanity,
-      requiresAuth: false,
-    );
-    return parseVanityResolution(result.body);
-  }
-
-  /// Resolución de vanity sin credenciales, vía el XML público de perfil.
-  Future<VanityResolution> _resolveVanityViaCommunityXml(String vanity) async {
     final Uri uri = SteamApiUrls.communityVanityProfileXml(vanity);
     try {
       final _HttpResult result = await _get(
@@ -326,71 +239,6 @@ class SteamApiClient {
     }
   }
 
-  /// Comprueba la clave configurada usando un perfil conocido por el usuario.
-  ///
-  /// No existe un endpoint de "prueba de clave" en Steam: la comprobación se
-  /// realiza sobre `GetPlayerSummaries`, que exige una clave válida y devuelve
-  /// datos públicos. Es una comprobación real, no simulada.
-  Future<ApiKeyCheckResult> verifyApiKey({String? steamId64}) async {
-    if (!hasApiKey) {
-      return const ApiKeyCheckResult(
-        keyAccepted: false,
-        profileFound: null,
-        messageEs: 'No hay ninguna clave de Steam Web API configurada.',
-      );
-    }
-    try {
-      if (steamId64 == null || steamId64.trim().isEmpty) {
-        // Sin perfil propio: se consulta siempre la misma cuenta conocida de
-        // Valve ("Valve" 76561197960435530). Es un dato público y estático que
-        // permite comprobar la credencial sin depender de perfiles del usuario.
-        final List<SteamPlayerSummary> probe =
-            await fetchPlayerSummaries(const <String>['76561197960435530']);
-        if (probe.isEmpty) {
-          return const ApiKeyCheckResult(
-            keyAccepted: null,
-            profileFound: null,
-            messageEs: 'Steam respondió sin datos para la consulta de '
-                'comprobación. No es posible determinar si la clave es válida.',
-          );
-        }
-        return const ApiKeyCheckResult(
-          keyAccepted: true,
-          profileFound: null,
-          messageEs: 'La clave funciona: Steam ha aceptado la consulta.',
-        );
-      }
-
-      final String id = steamId64.trim();
-      final List<SteamPlayerSummary> summaries =
-          await fetchPlayerSummaries(<String>[id]);
-      final bool found = summaries.any((SteamPlayerSummary s) => s.steamId64 == id);
-      return ApiKeyCheckResult(
-        keyAccepted: true,
-        profileFound: found,
-        messageEs: found
-            ? 'La clave es válida y el perfil responde correctamente.'
-            : 'La clave es válida, pero Steam no reconoce el perfil $id. '
-                'Comprueba el SteamID64.',
-      );
-    } on SteamApiException catch (e) {
-      if (e.kind == SteamApiErrorKind.invalidApiKey) {
-        return ApiKeyCheckResult(
-          keyAccepted: false,
-          profileFound: null,
-          messageEs: 'Steam ha rechazado la clave: no es válida o está revocada.',
-          technicalDetail: 'HTTP ${e.statusCode}',
-        );
-      }
-      return ApiKeyCheckResult(
-        keyAccepted: null,
-        profileFound: null,
-        messageEs: '${e.messageEs} No se puede confirmar el estado de la clave.',
-        technicalDetail: 'HTTP ${e.statusCode} · ${e.kind.name}',
-      );
-    }
-  }
-
   // -------------------------------------------------------------------------
   // Núcleo HTTP
   // -------------------------------------------------------------------------
@@ -407,19 +255,14 @@ class SteamApiClient {
         endpoint: uri.path,
       );
     }
-    if (requiresAuth && !hasSteamAuth) {
+    if (requiresAuth && !hasAccessToken) {
       throw const SteamApiException(
         kind: SteamApiErrorKind.incompleteConfiguration,
-        messageEs: 'Falta una credencial de Steam: conecta tu cuenta o guarda '
-            'una clave de Steam Web API.',
+        messageEs: 'Conecta tu cuenta de Steam para consultar estos datos.',
       );
     }
 
-    // En modo token el `access_token` se añade a la URL; en modo clave viaja
-    // en el encabezado (la URL no cambia).
     final Uri finalUri = _withAccessToken(uri);
-    final String authMode =
-        hasApiKey ? 'key' : (hasAccessToken ? 'token' : 'none');
 
     final DateTime? until = _rateLimitedUntil;
     if (until != null && DateTime.now().isBefore(until)) {
@@ -433,7 +276,7 @@ class SteamApiClient {
     }
 
     // Deduplicación: dos peticiones idénticas comparten el mismo futuro.
-    final String key = '$finalUri|$authMode';
+    final String key = finalUri.toString();
     final Future<_HttpResult>? existing = _inFlight[key];
     if (existing != null) return existing;
 
@@ -447,15 +290,12 @@ class SteamApiClient {
     });
   }
 
-  /// Añade el `access_token` a la URL solo cuando se autentica por token.
-  ///
-  /// Si hay clave de Web API, esta viaja en el encabezado y la URL queda
-  /// intacta (así ninguna credencial se duplica entre URL y cabecera).
+  /// Añade el `access_token` a la URL de la Steam Web API.
   ///
   /// El token **solo** viaja hacia `api.steampowered.com`: las consultas al
   /// XML público de `steamcommunity.com` se emiten sin credencial alguna.
   Uri _withAccessToken(Uri uri) {
-    if (!_authenticatingByToken) return uri;
+    if (!hasAccessToken) return uri;
     if (uri.host != AppConstants.steamApiHost) return uri;
     return uri.replace(
       queryParameters: <String, String>{
@@ -501,14 +341,10 @@ class SteamApiClient {
     Uri uri, {
     required _EndpointPolicy policy,
   }) async {
+    // Ninguna cabecera de credencial: el token (si procede) va en la URL.
     final Map<String, String> headers = <String, String>{
-      'Accept': 'application/json',
+      'Accept': '*/*',
     };
-    if (hasApiKey) {
-      // La clave viaja únicamente en el encabezado. Nunca se registra. En
-      // modo token no hay cabecera de credencial: el token va en la URL.
-      headers[AppConstants.steamApiKeyHeader] = _apiKey!;
-    }
 
     http.Response response;
     try {
@@ -591,25 +427,6 @@ class SteamApiClient {
       case 403:
         // Interpretación según la semántica documentada del endpoint.
         switch (policy) {
-          case _EndpointPolicy.summaries:
-          case _EndpointPolicy.vanity:
-            // En modo token no hay "clave": el rechazo significa que la sesión
-            // ha caducado o no autoriza, así que se pide reconectar.
-            if (_authenticatingByToken) {
-              return SteamApiException(
-                kind: SteamApiErrorKind.invalidCredentials,
-                messageEs:
-                    defaultSteamErrorMessage(SteamApiErrorKind.invalidCredentials),
-                statusCode: statusCode,
-                endpoint: endpoint,
-              );
-            }
-            return SteamApiException(
-              kind: SteamApiErrorKind.invalidApiKey,
-              messageEs: defaultSteamErrorMessage(SteamApiErrorKind.invalidApiKey),
-              statusCode: statusCode,
-              endpoint: endpoint,
-            );
           case _EndpointPolicy.recentlyPlayed:
             return SteamApiException(
               kind: SteamApiErrorKind.privateOrUnavailable,
@@ -621,7 +438,7 @@ class SteamApiClient {
             );
           case _EndpointPolicy.communityProfile:
             // El XML público se pide sin credencial: un 401/403 ahí es un
-            // bloqueo del servidor, no un perfil inválido ni una sesión mala.
+            // bloqueo del servidor, no un perfil inválido.
             return SteamApiException(
               kind: SteamApiErrorKind.http,
               messageEs: defaultSteamErrorMessage(SteamApiErrorKind.http),
@@ -631,19 +448,12 @@ class SteamApiClient {
         }
 
       case 400:
-        // Steam no usa el 400 para "perfil inexistente" (eso responde 200
-        // con <error>): en el XML público es solo una petición inesperada.
-        if (policy == _EndpointPolicy.communityProfile) {
-          return SteamApiException(
-            kind: SteamApiErrorKind.http,
-            messageEs: defaultSteamErrorMessage(SteamApiErrorKind.http),
-            statusCode: statusCode,
-            endpoint: endpoint,
-          );
-        }
+        // Steam responde 400 cuando la petición no tiene sentido (por ejemplo,
+        // un parámetro ausente). Un perfil inexistente responde 200 con
+        // <error>, nunca 400.
         return SteamApiException(
-          kind: SteamApiErrorKind.invalidProfile,
-          messageEs: defaultSteamErrorMessage(SteamApiErrorKind.invalidProfile),
+          kind: SteamApiErrorKind.http,
+          messageEs: 'Steam rechazó la petición (error 400).',
           statusCode: statusCode,
           endpoint: endpoint,
         );

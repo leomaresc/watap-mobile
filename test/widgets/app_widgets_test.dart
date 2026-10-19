@@ -5,8 +5,6 @@
 /// están desactivadas y el cliente HTTP es simulado.
 library;
 
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -16,7 +14,6 @@ import 'package:watap_mobile/widgets/loading_state.dart';
 
 import '../helpers/test_support.dart';
 
-const String _key = 'clave-de-prueba-1234567890abcdef';
 const String _id = '76561198000000000';
 const String _token = 'token-de-prueba-123';
 
@@ -24,40 +21,29 @@ const String _recentJson =
     '{"response":{"total_count":1,"games":[{"appid":570,"name":"Dota 2",'
     '"playtime_2weeks":100,"playtime_forever":1000}]}}';
 
+/// Enrutado simulado: XML público de perfil y juegos recientes.
 http.Response _dispatch(http.Request request) {
-  final String path = request.url.path;
-  if (path.contains('GetPlayerSummaries')) {
-    final List<String> ids = (request.url.queryParameters['steamids'] ?? '')
-        .split(',')
-        .where((String s) => s.isNotEmpty)
-        .toList(growable: false);
-    return jsonResponse(
-      jsonEncode(<String, Object?>{
-        'response': <String, Object?>{
-          'players': ids
-              .map((String id) => <String, Object?>{
-                    'steamid': id,
-                    'personaname': 'Jugador $id',
-                    'communityvisibilitystate': 3,
-                  })
-              .toList(),
-        },
-      }),
+  if (request.url.host == 'steamcommunity.com') {
+    final String id = request.url.pathSegments.isEmpty
+        ? _id
+        : request.url.pathSegments.last;
+    return xmlResponse(
+      communityProfileXmlBody(steamId64: id, name: 'Jugador $id'),
     );
   }
-  if (path.contains('GetRecentlyPlayedGames')) return jsonResponse(_recentJson);
+  if (request.url.path.contains('GetRecentlyPlayedGames')) {
+    return jsonResponse(_recentJson);
+  }
   return jsonResponse('{}');
 }
 
 /// Construye el entorno de prueba y lo registra para cerrarlo al terminar.
 Future<TestEnvironment> _buildEnvironment({
   required FakeHttpClient httpClient,
-  String? apiKey,
   String? steamToken,
 }) async {
   final TestEnvironment env = await buildTestEnvironment(
     httpClient: httpClient,
-    apiKey: apiKey,
     steamToken: steamToken,
   );
   addTearDown(env.dispose);
@@ -111,11 +97,10 @@ void main() {
     expect(fake.callCount, 0);
   });
 
-  testWidgets('con clave y sin integrantes se muestra el estado vacío',
+  testWidgets('con sesión y sin integrantes se muestra el estado vacío',
       (WidgetTester tester) async {
     final TestEnvironment env = await _buildEnvironment(
       httpClient: FakeHttpClient(_dispatch),
-      apiKey: _key,
       steamToken: _token,
     );
 
@@ -133,7 +118,6 @@ void main() {
       (WidgetTester tester) async {
     final TestEnvironment env = await _buildEnvironment(
       httpClient: FakeHttpClient(_dispatch),
-      apiKey: _key,
       steamToken: _token,
     );
     await pumpWatapApp(tester, env.controller);
@@ -157,7 +141,6 @@ void main() {
     });
     final TestEnvironment env = await _buildEnvironment(
       httpClient: fake,
-      apiKey: _key,
       steamToken: _token,
     );
 

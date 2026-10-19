@@ -34,14 +34,6 @@ const String _groupJson = '''
 ],"free_spots":3}}
 ''';
 
-/// Respuestas de `GetPlayerSummaries` para los dos integrantes.
-const String _summariesJson =
-    '{"response":{"players":['
-    '{"steamid":"76561198000000000","personaname":"Ana",'
-    '"avatarfull":"https://a/1.jpg"},'
-    '{"steamid":"76561198000000009","personaname":"Bruno"}'
-    ']}}';
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   initTestDatabaseFactory();
@@ -212,49 +204,7 @@ void main() {
   // --- Sincronización --------------------------------------------------------
 
   group('FamilyGroupSyncService', () {
-    test('importa los integrantes con nombre y avatar', () async {
-      final TestEnvironment env = await buildTestEnvironment(
-        httpClient: FakeHttpClient(
-          (http.Request request) {
-            final String path = request.url.path;
-            if (path.contains('GetFamilyGroupForUser')) {
-              return jsonResponse(_forUserJson);
-            }
-            if (path.contains('GetFamilyGroup')) {
-              return jsonResponse(_groupJson);
-            }
-            if (path.contains('GetPlayerSummaries')) {
-              return jsonResponse(_summariesJson);
-            }
-            return jsonResponse('{}');
-          },
-        ),
-        apiKey: 'clave-de-prueba-1234567890abcdef',
-        steamToken: _token,
-      );
-      addTearDown(env.dispose);
-
-      final FamilySyncOutcome outcome =
-          await env.controller.syncFamilyGroup();
-
-      expect(outcome.success, isTrue);
-      expect(outcome.total, 2);
-      expect(outcome.added, 2);
-      expect(outcome.groupName, 'Familia Salazar');
-      expect(env.controller.profiles, hasLength(2));
-      expect(
-        env.controller.profiles.every((Profile p) => p.isFamilyMember),
-        isTrue,
-      );
-      // El resumen completo se aplica a un solo integrante; el otro queda con
-      // el identificador.
-      final Profile? named = env.controller.profiles
-          .cast<Profile?>()
-          .firstWhere((Profile? p) => p!.steamId64 == '76561198000000000');
-      expect(named!.personaName, 'Ana');
-    });
-
-    test('sin clave, los integrantes toman el nombre del XML público',
+    test('importa los integrantes y los nombres vienen del XML público',
         () async {
       final TestEnvironment env = await buildTestEnvironment(
         httpClient: FakeHttpClient(
@@ -270,7 +220,9 @@ void main() {
               // Un integrante tiene perfil público; el otro no existe.
               return url.path.contains('76561198000000000')
                   ? xmlResponse(communityProfileXmlBody(
-                      steamId64: '76561198000000000', name: 'Ana'))
+                      steamId64: '76561198000000000',
+                      name: 'Ana',
+                      avatarUrl: 'https://a/1.jpg'))
                   : xmlResponse(communityProfileNotFoundXml);
             }
             return jsonResponse('{}');
@@ -284,10 +236,15 @@ void main() {
 
       expect(outcome.success, isTrue);
       expect(outcome.added, 2);
+      expect(outcome.groupName, 'Familia Salazar');
+      expect(
+        env.controller.profiles.every((Profile p) => p.isFamilyMember),
+        isTrue,
+      );
       final Profile ana = env.controller.profiles
           .firstWhere((Profile p) => p.steamId64 == '76561198000000000');
       expect(ana.personaName, 'Ana',
-          reason: 'Sin clave, el nombre debe venir del XML público.');
+          reason: 'El nombre debe venir del XML público.');
       final Profile other = env.controller.profiles
           .firstWhere((Profile p) => p.steamId64 == '76561198000000009');
       expect(other.personaName, isNull,
@@ -305,7 +262,6 @@ void main() {
           FakeHttpClient((http.Request _) => jsonResponse('{}'));
       final TestEnvironment env = await buildTestEnvironment(
         httpClient: fake,
-        apiKey: 'clave-de-prueba-1234567890abcdef',
       );
       addTearDown(env.dispose);
 
@@ -327,7 +283,6 @@ void main() {
             return jsonResponse('{}');
           },
         ),
-        apiKey: 'clave-de-prueba-1234567890abcdef',
         steamToken: _token,
       );
       addTearDown(env.dispose);
@@ -354,7 +309,6 @@ void main() {
             return jsonResponse('{}');
           },
         ),
-        apiKey: 'clave-de-prueba-1234567890abcdef',
         steamToken: _token,
       );
       addTearDown(env.dispose);
@@ -390,7 +344,6 @@ void main() {
             return jsonResponse('{"response":{"players":[]}}');
           },
         ),
-        apiKey: 'clave-de-prueba-1234567890abcdef',
         steamToken: _token,
       );
       addTearDown(env.dispose);
@@ -428,7 +381,6 @@ void main() {
             return jsonResponse('{"response":{"players":[]}}');
           },
         ),
-        apiKey: 'clave-de-prueba-1234567890abcdef',
         steamToken: _token,
       );
       addTearDown(env.dispose);
@@ -451,7 +403,6 @@ void main() {
         httpClient: FakeHttpClient(
           (http.Request _) => jsonResponse('{"error":"x"}', status: 401),
         ),
-        apiKey: 'clave-de-prueba-1234567890abcdef',
         steamToken: _token,
       );
       addTearDown(env.dispose);
@@ -480,7 +431,6 @@ void main() {
             return jsonResponse('{"response":{"players":[]}}');
           },
         ),
-        apiKey: 'clave-de-prueba-1234567890abcdef',
         steamToken: _token,
       );
       addTearDown(env.dispose);

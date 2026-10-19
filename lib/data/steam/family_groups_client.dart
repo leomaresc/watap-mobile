@@ -1,8 +1,7 @@
 /// Cliente de `IFamilyGroupsService`: el grupo familiar de Steam.
 ///
-/// **Este servicio no funciona con la clave de Web API**: Steam solo lo expone
-/// a un `access_token` de una sesión de Steam iniciada (el `webapi_token` de la
-/// sesión de la tienda).
+/// **Este servicio solo acepta el `access_token` de una sesión de Steam**
+/// iniciada (el `webapi_token` de la sesión de la tienda).
 ///
 /// Steam exige **GET** para este servicio: el `POST` responde HTTP 405
 /// («This API must be called with a HTTP GET request»). Por eso el token viaja

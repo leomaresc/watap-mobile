@@ -1,8 +1,6 @@
 /// Pruebas del controlador de la aplicación con dependencias simuladas.
 library;
 
-import 'dart:convert';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:watap_mobile/core/models.dart';
@@ -11,41 +9,34 @@ import 'package:watap_mobile/state/app_controller.dart';
 
 import '../helpers/test_support.dart';
 
-const String _key = 'clave-de-prueba-1234567890abcdef';
+const String _token = 'token-de-prueba';
 const String _id = '76561198000000000';
 
 const String _recentJson =
     '{"response":{"total_count":1,"games":[{"appid":570,"name":"Dota 2",'
     '"playtime_2weeks":100,"playtime_forever":1000}]}}';
 
+/// Enrutado simulado: XML público de perfil (con resolución de vanity) y
+/// juegos recientes.
 http.Response _dispatch(http.Request request) {
-  final String path = request.url.path;
-  if (path.contains('GetPlayerSummaries')) {
-    final List<String> ids = (request.url.queryParameters['steamids'] ?? '')
-        .split(',')
-        .where((String s) => s.isNotEmpty)
-        .toList(growable: false);
-    return jsonResponse(
-      jsonEncode(<String, Object?>{
-        'response': <String, Object?>{
-          'players': ids
-              .map((String id) => <String, Object?>{
-                    'steamid': id,
-                    'personaname': 'Jugador $id',
-                    'communityvisibilitystate': 3,
-                  })
-              .toList(),
-        },
-      }),
+  if (request.url.host == 'steamcommunity.com') {
+    final String path = request.url.path;
+    if (path.startsWith('/id/')) {
+      final String vanity = Uri.decodeComponent(path.substring('/id/'.length));
+      if (vanity == 'ana') {
+        return xmlResponse(
+          communityProfileXmlBody(steamId64: _id, name: 'Ana'),
+        );
+      }
+      return xmlResponse(communityProfileNotFoundXml);
+    }
+    final String id = request.url.pathSegments.last;
+    return xmlResponse(
+      communityProfileXmlBody(steamId64: id, name: 'Jugador $id'),
     );
   }
-  if (path.contains('GetRecentlyPlayedGames')) return jsonResponse(_recentJson);
-  if (path.contains('ResolveVanityURL')) {
-    final String vanity = request.url.queryParameters['vanityurl'] ?? '';
-    if (vanity == 'ana') {
-      return jsonResponse('{"response":{"success":1,"steamid":"$_id"}}');
-    }
-    return jsonResponse('{"response":{"success":42,"message":"No match"}}');
+  if (request.url.path.contains('GetRecentlyPlayedGames')) {
+    return jsonResponse(_recentJson);
   }
   return jsonResponse('{}');
 }
@@ -57,7 +48,7 @@ void main() {
   initTestDatabaseFactory();
 
   group('configuración inicial', () {
-    test('sin credenciales la app no está lista', () async {
+    test('sin sesión la app no está lista', () async {
       final TestEnvironment env = await buildTestEnvironment(httpClient: _fake());
       addTearDown(env.dispose);
 
@@ -66,46 +57,19 @@ void main() {
       expect(env.controller.profiles, isEmpty);
     });
 
-    test('con clave y sesión la app está lista', () async {
+    test('con la sesión de Steam la app está lista', () async {
       final TestEnvironment env = await buildTestEnvironment(
         httpClient: _fake(),
-        apiKey: _key,
-        steamToken: 'token-de-prueba',
+        steamToken: _token,
       );
       addTearDown(env.dispose);
 
-      expect(env.controller.hasApiKey, isTrue);
       expect(env.controller.hasFamilyToken, isTrue);
       expect(env.controller.hasSteamAuth, isTrue);
       expect(env.controller.onboardingComplete, isTrue);
     });
 
-    test('solo el token de Steam basta para tener la app lista', () async {
-      final TestEnvironment env = await buildTestEnvironment(
-        httpClient: _fake(),
-        steamToken: 'token-sin-clave',
-      );
-      addTearDown(env.dispose);
-
-      expect(env.controller.hasApiKey, isFalse,
-          reason: 'El token debe bastar sin pedir clave de Web API.');
-      expect(env.controller.hasFamilyToken, isTrue);
-      expect(env.controller.hasSteamAuth, isTrue);
-      expect(env.controller.onboardingComplete, isTrue);
-    });
-
-    test('solo la clave (respaldo) también da por superado el asistente',
-        () async {
-      final TestEnvironment env =
-          await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
-      addTearDown(env.dispose);
-
-      expect(env.controller.hasFamilyToken, isFalse);
-      expect(env.controller.onboardingComplete, isTrue);
-    });
-
-    test('sin credenciales, omitir el paso da por completado el asistente',
-        () async {
+    test('sin sesión, omitir el paso da por completado el asistente', () async {
       final TestEnvironment env = await buildTestEnvironment(httpClient: _fake());
       addTearDown(env.dispose);
 
@@ -121,8 +85,10 @@ void main() {
 
   group('integrantes', () {
     test('añadir por SteamID64 guarda el perfil y su nombre público', () async {
-      final TestEnvironment env =
-          await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
+      final TestEnvironment env = await buildTestEnvironment(
+        httpClient: _fake(),
+        steamToken: _token,
+      );
       addTearDown(env.dispose);
 
       final OperationResult result = await env.controller.addProfile(_id);
@@ -134,8 +100,10 @@ void main() {
     });
 
     test('no se puede añadir dos veces el mismo perfil', () async {
-      final TestEnvironment env =
-          await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
+      final TestEnvironment env = await buildTestEnvironment(
+        httpClient: _fake(),
+        steamToken: _token,
+      );
       addTearDown(env.dispose);
       await env.controller.addProfile(_id);
 
@@ -146,19 +114,21 @@ void main() {
       expect(env.controller.profiles, hasLength(1));
     });
 
-    test('resolver un nombre personalizado exige clave de API', () async {
+    test('resolver un nombre personalizado exige la sesión de Steam', () async {
       final TestEnvironment env = await buildTestEnvironment(httpClient: _fake());
       addTearDown(env.dispose);
 
       final OperationResult result = await env.controller.addProfile('ana');
 
       expect(result.success, isFalse);
-      expect(result.messageEs, contains('clave'));
+      expect(result.messageEs, contains('conectar'));
     });
 
-    test('con clave, un nombre personalizado se resuelve y se añade', () async {
-      final TestEnvironment env =
-          await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
+    test('con sesión, un nombre personalizado se resuelve y se añade', () async {
+      final TestEnvironment env = await buildTestEnvironment(
+        httpClient: _fake(),
+        steamToken: _token,
+      );
       addTearDown(env.dispose);
 
       final OperationResult result = await env.controller.addProfile('ana');
@@ -168,8 +138,10 @@ void main() {
     });
 
     test('un nombre personalizado inexistente devuelve un error claro', () async {
-      final TestEnvironment env =
-          await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
+      final TestEnvironment env = await buildTestEnvironment(
+        httpClient: _fake(),
+        steamToken: _token,
+      );
       addTearDown(env.dispose);
 
       final OperationResult result =
@@ -180,8 +152,10 @@ void main() {
     });
 
     test('eliminar un integrante lo quita de la lista', () async {
-      final TestEnvironment env =
-          await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
+      final TestEnvironment env = await buildTestEnvironment(
+        httpClient: _fake(),
+        steamToken: _token,
+      );
       addTearDown(env.dispose);
       await env.controller.addProfile(_id);
 
@@ -194,8 +168,10 @@ void main() {
 
   group('importación masiva', () {
     test('importar una lista añade los perfiles válidos', () async {
-      final TestEnvironment env =
-          await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
+      final TestEnvironment env = await buildTestEnvironment(
+        httpClient: _fake(),
+        steamToken: _token,
+      );
       addTearDown(env.dispose);
 
       // 'ana' resuelve al mismo SteamID64 que _id, así que se omite como
@@ -211,7 +187,7 @@ void main() {
       expect(env.controller.profiles.single.steamId64, _id);
     });
 
-    test('sin clave, la importación se rechaza', () async {
+    test('sin sesión, la importación se rechaza', () async {
       final TestEnvironment env = await buildTestEnvironment(httpClient: _fake());
       addTearDown(env.dispose);
 
@@ -220,43 +196,16 @@ void main() {
 
       expect(result.isError, isTrue);
       expect(result.added, 0);
-      expect(result.messageEs, contains('clave'));
-    });
-  });
-
-  group('clave de API', () {
-    test('se guarda en el almacén seguro y activa el estado', () async {
-      const String secret = 'clave-secreta-para-la-prueba-0001';
-      final TestEnvironment env = await buildTestEnvironment(httpClient: _fake());
-      addTearDown(env.dispose);
-      expect(env.controller.hasApiKey, isFalse);
-
-      final OperationResult result = await env.controller.saveApiKey(secret);
-
-      expect(result.success, isTrue);
-      expect(env.controller.hasApiKey, isTrue);
-      expect(env.client.hasApiKey, isTrue);
-      expect(await env.keyStore.loadApiKey(), secret);
-    });
-
-    test('eliminar la clave la borra del almacén seguro', () async {
-      final TestEnvironment env =
-          await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
-      addTearDown(env.dispose);
-      expect(env.controller.hasApiKey, isTrue);
-
-      final OperationResult result = await env.controller.deleteApiKey();
-
-      expect(result.success, isTrue);
-      expect(env.controller.hasApiKey, isFalse);
-      expect(await env.keyStore.loadApiKey(), isNull);
+      expect(result.messageEs, contains('Conecta'));
     });
   });
 
   group('actualización y caché', () {
     test('refreshProfile guarda la actividad consultada', () async {
-      final TestEnvironment env =
-          await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
+      final TestEnvironment env = await buildTestEnvironment(
+        httpClient: _fake(),
+        steamToken: _token,
+      );
       addTearDown(env.dispose);
       await env.controller.addProfile(_id);
 
@@ -270,8 +219,10 @@ void main() {
 
     test('clearActivityCache borra la actividad y conserva los integrantes',
         () async {
-      final TestEnvironment env =
-          await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
+      final TestEnvironment env = await buildTestEnvironment(
+        httpClient: _fake(),
+        steamToken: _token,
+      );
       addTearDown(env.dispose);
       await env.controller.addProfile(_id);
       await env.controller.refreshProfile(_id);

@@ -6,7 +6,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/constants.dart';
 import 'data/local/app_database.dart';
-import 'data/local/secure_api_key_store.dart';
 import 'data/local/steam_token_store.dart';
 import 'data/repositories/activity_repository.dart';
 import 'data/repositories/preferences_repository.dart';
@@ -157,7 +156,6 @@ class WatapApp extends StatelessWidget {
 /// Construye el controlador con las dependencias reales.
 Future<AppController> createAppController() async {
   final AppDatabase database = await AppDatabase.open();
-  final ApiKeyStore keyStore = SecureApiKeyStore();
   final SteamTokenStore tokenStore = SecureSteamTokenStore();
   final SteamApiClient apiClient = SteamApiClient();
   final FamilyGroupsClient familyGroupsClient = FamilyGroupsClient();
@@ -184,7 +182,6 @@ Future<AppController> createAppController() async {
     profilesRepository: profilesRepository,
     activityRepository: activityRepository,
     preferencesRepository: preferencesRepository,
-    apiKeyStore: keyStore,
     tokenStore: tokenStore,
     apiClient: apiClient,
     familyGroupsClient: familyGroupsClient,

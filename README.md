@@ -15,7 +15,7 @@ juegos recientes" de "el perfil es privado o no está disponible".
 > **WATAP Mobile es un proyecto independiente.** No está afiliado, asociado,
 > autorizado ni respaldado por Valve Corporation. Steam es una marca registrada
 > de Valve Corporation. Consulta el apartado
-> [Licencia y descargos](#21-licencia-y-descargos).
+> [Licencia y descargos](#19-licencia-y-descargos).
 
 ---
 
@@ -27,21 +27,19 @@ juegos recientes" de "el perfil es privado o no está disponible".
 4. [Aviso importante sobre la interpretación de los datos](#4-aviso-importante-sobre-la-interpretación-de-los-datos)
 5. [Requisitos](#5-requisitos)
 6. [Compilación e instalación](#6-compilación-e-instalación)
-7. [Obtener una clave de Steam Web API](#7-obtener-una-clave-de-steam-web-api)
-8. [Configurar la clave en la aplicación](#8-configurar-la-clave-en-la-aplicación)
-9. [Conectar con Steam (grupo familiar)](#9-conectar-con-steam-grupo-familiar)
-10. [Uso de la aplicación](#10-uso-de-la-aplicación)
-11. [Privacidad y datos almacenados](#11-privacidad-y-datos-almacenados)
-12. [Permisos](#12-permisos)
-13. [Endpoints de Steam utilizados](#13-endpoints-de-steam-utilizados)
-14. [Arquitectura del código](#14-arquitectura-del-código)
-15. [Modelo de datos y política de caché](#15-modelo-de-datos-y-política-de-caché)
-16. [Pruebas automatizadas](#16-pruebas-automatizadas)
-17. [Análisis estático](#17-análisis-estático)
-18. [Limitaciones conocidas](#18-limitaciones-conocidas)
-19. [Hoja de ruta](#19-hoja-de-ruta)
-20. [Estructura del repositorio](#20-estructura-del-repositorio)
-21. [Licencia y descargos](#21-licencia-y-descargos)
+7. [Conectar con Steam (grupo familiar y actividad)](#7-conectar-con-steam-grupo-familiar-y-actividad)
+8. [Uso de la aplicación](#8-uso-de-la-aplicación)
+9. [Privacidad y datos almacenados](#9-privacidad-y-datos-almacenados)
+10. [Permisos](#10-permisos)
+11. [Endpoints de Steam utilizados](#11-endpoints-de-steam-utilizados)
+12. [Arquitectura del código](#12-arquitectura-del-código)
+13. [Modelo de datos y política de caché](#13-modelo-de-datos-y-política-de-caché)
+14. [Pruebas automatizadas](#14-pruebas-automatizadas)
+15. [Análisis estático](#15-análisis-estático)
+16. [Limitaciones conocidas](#16-limitaciones-conocidas)
+17. [Hoja de ruta](#17-hoja-de-ruta)
+18. [Estructura del repositorio](#18-estructura-del-repositorio)
+19. [Licencia y descargos](#19-licencia-y-descargos)
 
 ---
 
@@ -66,11 +64,11 @@ Idioma de la interfaz: **español**.
 - **Un solo paso de configuración: conectar tu cuenta de Steam.** Conectas una
   vez (con la página oficial de Steam en un WebView) y WATAP:
   - lee tu grupo familiar con `IFamilyGroupsService` e **importa tus
-    integrantes automáticamente**, con su nombre público y avatar (de la API
-    con clave, o del perfil público en XML cuando no la hay); y
+    integrantes automáticamente**, con su nombre público y avatar (del perfil
+    público en XML de Steam Community); y
   - consulta la actividad de cada uno con el **mismo token de sesión**.
-  **No hace falta pedir una clave de API ni copiar enlaces a mano.** La clave de
-  Web API queda como **respaldo opcional** por si la conexión no funciona.
+  **No hace falta pedir ninguna clave de API ni copiar enlaces a mano**: la
+  conexión con Steam es la única forma de autenticación.
 - **Importar integrantes a mano (respaldo)**: pega una lista de SteamID64, URLs
   de perfil o nombres personalizados. Cada entrada se procesa individualmente:
   una inválida no aborta el resto.
@@ -85,9 +83,8 @@ Idioma de la interfaz: **español**.
   siempre por **AppID**, nunca por nombre de juego.
 - **Vista "Integrantes"**: lista de perfiles con sincronización del grupo
   familiar, edición de alias, apertura en Steam y eliminación.
-- **Vista "Ajustes"**: gestión de la conexión con Steam, la clave de API
-  (opcional), umbrales de actividad, preferencias de visualización, caché y
-  pantallas de privacidad y "Acerca de".
+- **Vista "Ajustes"**: gestión de la conexión con Steam, umbrales de actividad,
+  preferencias de visualización, caché y pantallas de privacidad y "Acerca de".
 - **Caché local**: guarda la última consulta correcta y **la conserva** cuando un
   intento posterior falla, marcándola como procedente de la caché.
 
@@ -99,9 +96,9 @@ Estas ausencias son **decisiones deliberadas**, no funciones pendientes:
 
 - **No** consulta el estado "en línea ahora" ni afirma que alguien esté jugando
   en este momento.
-- **No** hace *scraping* del HTML de `steamcommunity.com`. Cuando no hay clave
-  de Web API, consulta el **XML público oficial de perfil** (`?xml=1`), que
-  devuelve datos estructurados; jamás se analiza HTML.
+- **No** hace *scraping* del HTML de `steamcommunity.com`. Consulta el **XML
+  público oficial de perfil** (`?xml=1`), que devuelve datos estructurados;
+  jamás se analiza HTML.
 - **No** lee archivos locales de Steam (por ejemplo, de una instalación de
   Windows), ni registros, ni archivos de configuración del cliente.
 - **No** ve ni guarda tu contraseña de Steam. El inicio de sesión ocurre en la
@@ -113,7 +110,7 @@ Estas ausencias son **decisiones deliberadas**, no funciones pendientes:
 - **No** ejecuta procesos en segundo plano ni temporizadores periódicos: todo
   ocurre como operaciones asíncronas mientras la aplicación está abierta.
 - **No** envía telemetría, analíticas ni datos de uso a ningún servidor propio.
-- **No** incluye anuncios (ver [Hoja de ruta](#19-hoja-de-ruta)).
+- **No** incluye anuncios (ver [Hoja de ruta](#17-hoja-de-ruta)).
 - **No** sincroniza datos entre dispositivos ni con la nube.
 - **No** solicita permisos que no sean estrictamente necesarios (ver
   [Permisos](#12-permisos)).
@@ -151,9 +148,8 @@ Para **usar** la aplicación:
 - Conexión a Internet (solo para consultar Steam y descargar portadas y
   avatares).
 - **Una conexión con Steam** (un solo paso, con la página oficial en un
-  WebView) para consultar perfiles reales. No se pide ninguna clave de API.
-  La clave de Web API es **opcional**, únicamente como respaldo si la conexión
-  no funciona en tu dispositivo.
+  WebView) para consultar perfiles reales. No se pide ninguna clave de API:
+  esa conexión es la única forma de autenticación.
 
 Para **compilar** el proyecto:
 
@@ -263,61 +259,11 @@ La versión Release se compila además con `minifyEnabled` y
 
 ---
 
-## 7. Obtener una clave de Steam Web API (opcional, solo respaldo)
+## 7. Conectar con Steam (grupo familiar y actividad)
 
-> Esta sección es **solo un respaldo**. Con la conexión normal con Steam (un
-> solo paso, sin clave) la aplicación funciona completa. La clave solo hace
-> falta si la conexión con Steam no funciona en tu dispositivo, o si prefieres
-> importar amigos o integrantes a mano sin conectar.
-
-La aplicación **no incluye ninguna clave**. Si necesitas la de respaldo, es
-gratuita:
-
-1. Inicia sesión en Steam en el navegador.
-2. Visita la página oficial:
-   **<https://steamcommunity.com/dev/apikey>**
-3. Rellena el campo *Domain Name*. Para uso personal basta con un nombre de
-   dominio cualquiera (por ejemplo, `localhost`); Steam no verifica la
-   propiedad para este tipo de clave.
-4. Acepta las condiciones y pulsa **Register**.
-5. Copia la clave de 32 caracteres que aparece. **No la compartas**: identifica
-   tu cuenta y tiene límites de uso.
-
-> La clave se usa únicamente para llamar a la Steam Web API en nombre de tu
-> cuenta. Cualquiera que la tenga puede consumir tu cuota de solicitudes.
-
----
-
-## 8. Configurar la clave en la aplicación (opcional)
-
-1. Abre **Ajustes** (pestaña inferior derecha).
-2. En la sección **CLAVE DE WEB API (OPCIONAL)**, toca **Sin clave
-   configurada / Clave configurada**.
-3. Pega la clave y guárdala.
-4. Opcional: toca **Verificar la clave**. WATAP hará una consulta **real** a
-   `GetPlayerSummaries` (usando tu perfil propio, si lo has marcado, o un perfil
-   público conocido de Valve) y te dirá si Steam la acepta.
-
-**Qué cambia con la clave (modo respaldo):** las consultas públicas
-(actividad, resúmenes, nombres personalizados) usan la clave en su lugar del
-token de sesión. El grupo familiar **sigue requiriendo la conexión con Steam**.
-
-**Cómo se guarda la clave:**
-
-- Se almacena **exclusivamente** en el almacenamiento seguro del dispositivo
-  (Keystore en Android, Keychain en iOS) mediante `flutter_secure_storage`.
-- **Nunca** se guarda en SQLite, ni en JSON, ni en preferencias, ni en recursos
-  del APK, ni en registros.
-- Viaja a Steam en el encabezado HTTP `x-webapi-key`, **nunca** en la URL, para
-  que no quede en rutas ni en registros de intermediarios.
-
----
-
-## 9. Conectar con Steam (grupo familiar y actividad)
-
-Este es el **único paso de configuración**. El grupo familiar **no** se puede
-leer con la clave de Web API: Steam solo lo entrega con un token de una sesión
-iniciada. WATAP obtiene ese token de la forma menos invasiva posible:
+Este es el **único paso de configuración** y la **única forma de
+autenticación** de la aplicación. El grupo familiar se lee con el token de una
+sesión iniciada. WATAP obtiene ese token de la forma menos invasiva posible:
 
 1. En el asistente inicial (o en **Integrantes → Conectar con Steam**), la app
    abre la **página oficial de inicio de sesión de Steam** dentro de un WebView.
@@ -330,16 +276,15 @@ iniciada. WATAP obtiene ese token de la forma menos invasiva posible:
    `GetFamilyGroup` para obtener el nombre de tu familia y sus integrantes.
 5. Cada integrante se añade con su nombre público y avatar, y se marca como
    `isFamilyMember`. **El mismo token autentica después la actividad de cada
-   integrante** (`GetRecentlyPlayedGames`) y los resúmenes de perfil: no hace
-   falta ninguna clave de API.
+   integrante** (`GetRecentlyPlayedGames`); no hace falta ninguna otra
+   credencial.
 
 ### Cosas importantes
 
 - **Si Steam no acepta el WebView** (a veces pide verificación adicional), puedes
-  **omitir el paso** en el asistente (o usar la clave de respaldo de los
-  apartados 7 y 8) y la app sigue funcionando: solo tendrás que importar
-  integrantes a mano desde Integrantes. El paso se puede repetir más tarde
-  desde Integrantes o Ajustes.
+  **omitir el paso** en el asistente y la app sigue funcionando: solo tendrás
+  que importar integrantes a mano desde Integrantes. El paso se puede repetir
+  más tarde desde Integrantes o Ajustes.
 - **El token caduca**. Cuando eso pasa, WATAP borra el token y te pide conectar
   otra vez. Tus integrantes guardados **no se pierden**.
 - **El token viaja como parámetro `access_token` de la URL.** Steam exige
@@ -361,7 +306,7 @@ WATAP interpreta sus respuestas de forma defensiva y muestra un error claro
 
 ---
 
-## 10. Uso de la aplicación
+## 8. Uso de la aplicación
 
 La barra de navegación inferior tiene cuatro secciones:
 
@@ -371,14 +316,14 @@ La barra de navegación inferior tiene cuatro secciones:
   las sumas totales del grupo.
 - **Integrantes**: tarjeta del grupo familiar (conexión, sincronización y
   estado), lista de perfiles y, como respaldo, importación manual.
-- **Ajustes**: conexión con Steam, clave de API, umbrales de actividad,
-  visualización, caché y pantallas de privacidad y "Acerca de".
+- **Ajustes**: conexión con Steam, umbrales de actividad, visualización, caché y
+  pantallas de privacidad y "Acerca de".
 
 Acciones habituales:
 
 - **Actualizar todo**: botón de refresco de la cabecera.
 - **Actualizar un integrante**: botón de refresco de su tarjeta.
-- **Sincronizar grupo familiar**: en la sección Integrentes; vuelve a leer tu
+- **Sincronizar grupo familiar**: en la sección Integrantes; vuelve a leer tu
   familia en Steam y añade/retira integrantes automáticamente.
 - **Abrir el juego en Steam**: icono de enlace de cada juego (abre la ficha en la
   tienda con la aplicación del sistema).
@@ -387,14 +332,13 @@ Acciones habituales:
 
 ---
 
-## 11. Privacidad y datos almacenados
+## 9. Privacidad y datos almacenados
 
 WATAP **no tiene servidores propios**. No hay cuentas, ni sincronización, ni
 telemetría. Todo vive en tu dispositivo:
 
 | Dato                                   | Dónde se guarda                         |
 | -------------------------------------- | --------------------------------------- |
-| Clave de Steam Web API (opcional)      | Almacenamiento seguro (Keystore/Keychain) |
 | Token de sesión de Steam (`webapi_token`) | Almacenamiento seguro (Keystore/Keychain) |
 | Perfiles (SteamID64, nombre, avatar)   | SQLite local                            |
 | Actividad y juegos en caché            | SQLite local                            |
@@ -406,12 +350,13 @@ Valve dentro del WebView), cookies de sesión ni el resto de la respuesta de la
 página de Steam.
 
 **Qué sale del dispositivo:** únicamente las solicitudes HTTPS a
-`api.steampowered.com` (Steam Web API e `IFamilyGroupsService`), la carga de la
-página oficial de Steam en el WebView y las descargas de imágenes del CDN
-público de Steam. Nada más. La aplicación no contacta con ningún otro servicio.
-La credencial viaja en el encabezado `x-webapi-key` (clave) o como parámetro
-`access_token` de la URL (token, sobre la conexión HTTPS directa a Steam); en
-ningún caso se escribe en un registro.
+`api.steampowered.com` (Steam Web API e `IFamilyGroupsService`), la consulta
+del **perfil público en XML de Steam Community** (siempre sin credencial), la
+carga de la página oficial de Steam en el WebView y las descargas de imágenes
+del CDN público de Steam. Nada más. La aplicación no contacta con ningún otro
+servicio. El token viaja como parámetro `access_token` de la URL, sobre la
+conexión HTTPS directa a `api.steampowered.com` (jamás hacia
+`steamcommunity.com`); en ningún caso se escribe en un registro.
 
 Puedes vaciar los datos desde **Ajustes**:
 
@@ -422,13 +367,13 @@ Puedes vaciar los datos desde **Ajustes**:
 - *Eliminar integrante*: borra el perfil y, en cascada, su actividad y sus
   juegos.
 
-> Transparencia: el almacenamiento seguro protege la clave **en reposo**. Ninguna
+> Transparencia: el almacenamiento seguro protege el token **en reposo**. Ninguna
 > aplicación cliente puede garantizar protección absoluta frente a un dispositivo
 > comprometido, con *root* o con ejecución instrumentada.
 
 ---
 
-## 12. Permisos
+## 10. Permisos
 
 El manifiesto de Android declara **un único permiso**:
 
@@ -442,28 +387,28 @@ notificaciones.
 
 ---
 
-## 13. Endpoints de Steam utilizados
+## 11. Endpoints de Steam utilizados
 
-### Endpoints públicos (Steam Web API)
+### Steam Web API (con token de sesión)
 
-Con la clave de respaldo configurada, la credencial viaja en el encabezado
-`x-webapi-key` y la URL queda sin credencial. Con solo el token de sesión, la
-actividad viaja como parámetro `access_token` de la URL, sobre la conexión
-HTTPS directa a Steam (igual que la propia web de Steam).
+La actividad viaja como parámetro `access_token` de la URL, sobre la conexión
+HTTPS directa a `api.steampowered.com` (igual que la propia web de Steam).
 
-| Operación              | Endpoint                                              | Sin clave |
-| ---------------------- | ----------------------------------------------------- | --------- |
-| Juegos recientes       | `/IPlayerService/GetRecentlyPlayedGames/v1/`          | Con token |
-| Resúmenes de perfiles  | `/ISteamUser/GetPlayerSummaries/v2/`                  | **No** (exige `key=`) |
-| Resolver nombre        | `/ISteamUser/ResolveVanityURL/v1/`                    | **No** (exige `key=`) |
+| Operación              | Endpoint                                              |
+| ---------------------- | ----------------------------------------------------- |
+| Juegos recientes       | `/IPlayerService/GetRecentlyPlayedGames/v1/`          |
 
-`ISteamUser` responde HTTP 400 «Required parameter 'key'» cuando no hay clave.
-Por eso, **sin clave**, el nombre, el avatar y la visibilidad del perfil se
-leen del XML público oficial de Steam Community —siempre **sin ninguna
-credencial**, y con el token jamás viajando hacia `steamcommunity.com`:
+### Perfiles públicos (XML de Steam Community, sin credencial)
+
+El nombre, el avatar y la visibilidad del perfil se leen del **XML público
+oficial** de Steam Community —siempre **sin ninguna credencial**, y con el
+token jamás viajando hacia `steamcommunity.com`:
 
 - Perfil por SteamID64: `https://steamcommunity.com/profiles/{id}?xml=1`
 - Perfil por nombre personalizado: `https://steamcommunity.com/id/{nombre}?xml=1`
+
+(WATAP no usa `ISteamUser/GetPlayerSummaries` ni `ResolveVanityURL`: ambos
+exigen una clave de Web API que la aplicación no tiene ni necesita.)
 
 La respuesta es XML estructurado (nunca HTML) y se interpreta de forma
 defensiva: si Steam responde `<response><error>…</error></response>`, el
@@ -471,10 +416,10 @@ perfil no existe.
 
 ### Endpoints internos (exigen token de sesión)
 
-Estos endpoints **no están en la documentación pública de Steam** y **no
-aceptan la clave de Web API**: requieren el `webapi_token` de una sesión
-iniciada. Steam exige **`GET`** en este servicio (el `POST` responde HTTP 405),
-así que el token viaja como parámetro `access_token` de la URL.
+Estos endpoints **no están en la documentación pública de Steam**: requieren el
+`webapi_token` de una sesión iniciada. Steam exige **`GET`** en este servicio
+(el `POST` responde HTTP 405), así que el token viaja como parámetro
+`access_token` de la URL.
 
 | Operación                        | Endpoint                                            |
 | -------------------------------- | --------------------------------------------------- |
@@ -498,7 +443,7 @@ Documentación oficial: <https://steamcommunity.com/dev>
 
 ---
 
-## 14. Arquitectura del código
+## 12. Arquitectura del código
 
 Se usa **`ChangeNotifier` del propio SDK** (sin paquetes de gestión de estado
 adicionales), expuesto con un `InheritedNotifier` (`AppScope`). La lógica de
@@ -529,7 +474,7 @@ Puntos destacados:
 
 ---
 
-## 15. Modelo de datos y política de caché
+## 13. Modelo de datos y política de caché
 
 **Regla central:** *los datos válidos no se reemplazan por resultados vacíos
 derivados de un error.*
@@ -550,7 +495,7 @@ también en instalaciones nuevas, de modo que no puede quedar obsoleto.
 
 ---
 
-## 16. Pruebas automatizadas
+## 14. Pruebas automatizadas
 
 Las pruebas **no realizan llamadas reales a Steam**: usan un cliente HTTP
 simulado (`MockClient`) y una base de datos **SQLite en memoria** mediante
@@ -566,33 +511,30 @@ Cobertura funcional de la suite:
 
 - **Funciones puras**: formateo de minutos, números, fechas y tiempos relativos;
   clasificación de actividad; validación y normalización de entradas
-  (SteamID64, URL, *vanity*, alias, umbrales y formato de clave).
+  (SteamID64, URL, *vanity*, alias y umbrales).
 - **Modelos de dominio**: totales con datos desconocidos, marca de demostración
   persistente y saneado de preferencias.
 - **Agregación**: suma por AppID, acumulados incompletos, ordenaciones, filtros y
   búsqueda.
-- **Red**: encabezado `x-webapi-key` (y ausencia de la clave en la URL),
-  autenticación por token de sesión (`access_token` en la URL de la Web API y
-  **ausente** en las consultas al XML de `steamcommunity.com`), XML público de
-  perfil (nombre, visibilidad, perfil inexistente, XML malformado y
-  resolución de *vanity* sin clave), 429 con `Retry-After`, interpretación de
-  401/403 por endpoint y por modo de autenticación, 400/500, JSON inválido,
-  deduplicación y límite de concurrencia, y verificación de clave.
+- **Red**: el token de sesión viaja como `access_token` en la URL de la Web API
+  y **ausente** en las consultas al XML de `steamcommunity.com`; nunca se envía
+  cabecera `x-webapi-key` ni parámetro `key`; XML público de perfil (nombre,
+  visibilidad, perfil inexistente, XML malformado y resolución de *vanity* sin
+  credencial), 429 con `Retry-After`, interpretación de 401/403 por endpoint,
+  400/500, JSON inválido, deduplicación y límite de concurrencia.
 - **Parseo**: respuestas válidas, `{"response":{}}` como "no disponible",
-  negativos saturados, datos ausentes como `null`, resolución de *vanity* y
-  lista de amigos; y XML público de perfil (CDATA, privacidad, respaldo de
-  visibilidad y ausencia de identidad).
+  negativos saturados y datos ausentes como `null`; y XML público de perfil
+  (CDATA, privacidad, respaldo de visibilidad y ausencia de identidad).
 - **Almacenamiento local**: persistencia, prevención de duplicados, borrado en
   cascada, política de caché, migraciones desde la versión 1 y **aislamiento de
-  las credenciales** (se comprueba que la clave no aparece en ninguna tabla).
+  las credenciales** (se comprueba que el token no aparece en ninguna tabla).
 - **Servicios**: agregador de actividad, coordinador de actualizaciones
   (privacidad, caché ante fallos y concurrencia del flujo) y **sincronización
   del grupo familiar** (parseo, reconciliación conservadora, cliente con token,
-  sin clave y sin cuerpo en el `GET`), con nombres tomados del XML público
-  cuando no hay clave.
+  sin credencial y sin cuerpo en el `GET`), con nombres tomados del XML público.
 - **Controlador**: modos de arranque, alta/duplicados/resolución de *vanity*,
-  gestión de la clave y del token de sesión, criterios del asistente (solo
-  token, solo clave u omitido bastan), actualización y borrado de caché.
+  gestión del token de sesión, criterios del asistente (conexión u omisión
+  explícita bastan), actualización y borrado de caché.
 - **Widgets**: estados de carga, error y vacío, asistente de configuración de
   un solo paso, navegación entre secciones y visualización de datos en caché.
 
@@ -604,7 +546,7 @@ flutter test test/data/steam_api_client_test.dart
 
 ---
 
-## 17. Análisis estático
+## 15. Análisis estático
 
 ```bash
 flutter analyze
@@ -617,7 +559,7 @@ pasar" el análisis.**
 
 ---
 
-## 18. Limitaciones conocidas
+## 16. Limitaciones conocidas
 
 - **El APK Release se firma con claves de depuración** (ver
   [Firma de la versión Release](#65-firma-de-la-versión-release)). Es instalable
@@ -636,17 +578,17 @@ pasar" el análisis.**
 - **Alcance del token como credencial**: `IFamilyGroupsService` exige el token
   (verificado con herramientas de terceros y con la propia app). Para leer la
   actividad se envía el mismo token, tal como hacen herramientas públicas
-  existentes; si Steam lo rechazara en tu cuenta, WATAP lo indica y te ofrece
-  la **clave de Web API como respaldo** (apartados 7 y 8). `ISteamUser`
+  existentes; si Steam lo rechazara en tu cuenta, WATAP lo indica con honestidad
+  («detalles privados o sesión que no cubre esta consulta»). `ISteamUser`
   (resúmenes de perfil y resolución de nombres personalizados) **sí exige
-  clave** —verificado empíricamente—: sin ella, WATAP obtiene nombre, avatar y
+  clave** —verificado empíricamente—: por eso WATAP obtiene nombre, avatar y
   visibilidad del **XML público de perfil** de Steam Community, sin credencial.
 - **Importación de amigos**: la lista de amigos es privada por defecto; requiere
   marcarte como "mi perfil" y que la lista sea accesible con tu credencial.
 
 ---
 
-## 19. Hoja de ruta
+## 17. Hoja de ruta
 
 - [ ] **Integración de anuncios** (prevista, **no implementada** todavía). Cuando
       se aborde, se hará con un formato no intrusivo (p. ej. un banner discreto
@@ -660,7 +602,7 @@ pasar" el análisis.**
 
 ---
 
-## 20. Estructura del repositorio
+## 18. Estructura del repositorio
 
 ```
 .
@@ -688,7 +630,7 @@ pasar" el análisis.**
 
 ---
 
-## 21. Licencia y descargos
+## 19. Licencia y descargos
 
 Este proyecto se distribuye bajo la **licencia MIT**. Consulta el archivo
 [`LICENSE`](LICENSE).
@@ -699,8 +641,9 @@ Este proyecto se distribuye bajo la **licencia MIT**. Consulta el archivo
   autorizado, respaldado ni vinculado** de ninguna forma oficial con Valve
   Corporation ni con Steam. Steam es una marca registrada de Valve Corporation.
 - Los datos mostrados **pertenecen a Steam** y se obtienen exclusivamente a
-  través de su Web API pública y documentada y de su CDN público de imágenes.
+  través de su Web API pública y documentada, del XML público de perfil de Steam
+  Community y de su CDN público de imágenes.
 - El uso de la Steam Web API está sujeto a las
   [condiciones de Valve](https://steamcommunity.com/dev/apiterms). Eres
-  responsable de cumplirlas y de proteger tu propia clave de API.
+  responsable de cumplirlas y de proteger tus credenciales.
 

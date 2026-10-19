@@ -1,7 +1,7 @@
 /// Tipos de resultado usados por las capas de datos y servicios.
 ///
 /// Se evita lanzar excepciones para los fallos esperados (red, privacidad,
-/// clave inválida…). Así la interfaz siempre puede decidir qué mostrar sin
+/// sesión caducada…). Así la interfaz siempre puede decidir qué mostrar sin
 /// envolver todo en `try/catch`.
 library;
 
@@ -15,9 +15,6 @@ enum FailureKind {
 
   /// El servidor limitó las solicitudes (HTTP 429).
   rateLimited,
-
-  /// El servidor confirmó que la credencial no es válida.
-  invalidApiKey,
 
   /// El servidor denegó el acceso (privacidad o permisos insuficientes).
   forbidden,
@@ -37,7 +34,7 @@ enum FailureKind {
   /// La operación se descartó porque ya no es relevante (cancelación).
   cancelled,
 
-  /// Falta configuración necesaria (por ejemplo, la clave de API).
+  /// Falta la sesión de Steam (hay que conectar la cuenta).
   incompleteConfiguration,
 
   /// Causa no determinada.
@@ -56,7 +53,7 @@ class AppFailure implements Exception {
 
   final FailureKind kind;
 
-  /// Mensaje apto para mostrarse en la interfaz. Nunca contiene la clave.
+  /// Mensaje apto para mostrarse en la interfaz. Nunca contiene secretos.
   final String messageEs;
 
   /// Código HTTP, cuando exista.

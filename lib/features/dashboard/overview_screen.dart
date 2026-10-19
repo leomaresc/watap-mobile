@@ -50,9 +50,8 @@ class OverviewScreen extends StatelessWidget {
         message: controller.hasSteamAuth
             ? 'Actualiza los integrantes para obtener sus juegos recientes. '
                 'Si sus perfiles son privados, Steam no entregará los datos.'
-            : 'Conecta tu Steam (o guarda una clave de API en Ajustes) y '
-                'actualiza los integrantes para ver aquí la actividad '
-                'combinada.',
+            : 'Conecta tu cuenta de Steam y actualiza los integrantes para '
+                'ver aquí la actividad combinada.',
         icon: Icons.insights_outlined,
         actionLabel:
             controller.hasSteamAuth ? 'Actualizar integrantes' : 'Ir a Ajustes',

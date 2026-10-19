@@ -46,7 +46,7 @@ class AppBottomNavigation extends StatelessWidget {
           icon: Icon(Icons.settings_outlined),
           selectedIcon: Icon(Icons.settings),
           label: 'Ajustes',
-          tooltip: 'Clave de API, preferencias y caché',
+          tooltip: 'Conexión con Steam, preferencias y caché',
         ),
       ],
     );

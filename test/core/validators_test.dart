@@ -126,15 +126,4 @@ void main() {
       expect(validateActivityThresholds(120, 600001), isNotNull);
     });
   });
-
-  group('validateApiKeyFormat', () {
-    test('detecta errores evidentes sin validar el contenido real', () {
-      expect(validateApiKeyFormat(null), isNull);
-      expect(validateApiKeyFormat(''), isNotNull);
-      expect(validateApiKeyFormat('corta'), isNotNull);
-      expect(validateApiKeyFormat('a' * 200), isNotNull);
-      expect(validateApiKeyFormat('clave con espacios'), isNotNull);
-      expect(validateApiKeyFormat('a' * 32), isNull);
-    });
-  });
 }

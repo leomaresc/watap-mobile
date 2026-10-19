@@ -180,62 +180,6 @@ RecentlyPlayedParseResult parseRecentlyPlayedGames(String body) {
   );
 }
 
-/// Interpreta `ISteamUser/GetPlayerSummaries/v2`.
-///
-/// Devuelve únicamente los perfiles que Steam ha reconocido. Una lista vacía
-/// significa "Steam no reconoce esos SteamID64", no un error de formato.
-List<SteamPlayerSummary> parsePlayerSummaries(String body) {
-  final Object? decoded =
-      _decodeJsonObject(body, SteamApiUrls.playerSummaries(const <String>[]).path);
-  final Map<String, Object?> root = _asStringKeyMap(decoded);
-  final Map<String, Object?> response = _asStringKeyMap(root['response']);
-
-  final List<SteamPlayerSummary> result = <SteamPlayerSummary>[];
-  for (final Object? item in _asList(response['players'])) {
-    final Map<String, Object?> map = _asStringKeyMap(item);
-    final String? id = _asNonEmptyString(map['steamid']);
-    if (id == null || id.length != 17) continue;
-    result.add(
-      SteamPlayerSummary(
-        steamId64: id,
-        personaName: _asNonEmptyString(map['personaname']),
-        avatarUrl: _asNonEmptyString(map['avatarfull']) ??
-            _asNonEmptyString(map['avatarmedium']) ??
-            _asNonEmptyString(map['avatar']),
-        profileUrl: _asNonEmptyString(map['profileurl']),
-        communityVisibilityState: _asInt(map['communityvisibilitystate']),
-        personaState: _asInt(map['personastate']),
-      ),
-    );
-  }
-  return result;
-}
-
-/// Interpreta `ISteamUser/ResolveVanityURL/v1`.
-///
-/// `success == 1` indica resolución correcta; `success == 42` es el código
-/// documentado por Steam para "no se encontró ningún perfil con ese nombre".
-VanityResolution parseVanityResolution(String body) {
-  final Object? decoded =
-      _decodeJsonObject(body, SteamApiUrls.resolveVanityUrl('').path);
-  final Map<String, Object?> root = _asStringKeyMap(decoded);
-  final Map<String, Object?> response = _asStringKeyMap(root['response']);
-
-  final int? success = _asInt(response['success']);
-  final String? steamId = _asNonEmptyString(response['steamid']);
-
-  if (success == 1 && steamId != null && steamId.length == 17) {
-    return VanityResolution(success: true, steamId64: steamId);
-  }
-
-  final String messageEs = switch (success) {
-    42 => 'No existe ningún perfil de Steam con ese nombre personalizado.',
-    2 => 'El nombre personalizado indicado no existe.',
-    _ => 'Steam no ha podido resolver ese nombre personalizado.',
-  };
-  return VanityResolution(success: false, messageEs: messageEs);
-}
-
 /// Interpreta `IFamilyGroupsService/GetFamilyGroupForUser/v1`.
 ///
 /// Devuelve el identificador del grupo familiar de la cuenta autenticada. Si la

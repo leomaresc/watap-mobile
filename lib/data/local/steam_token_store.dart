@@ -1,9 +1,9 @@
 /// Almacenamiento seguro del `webapi_token` de la sesión de Steam.
 ///
-/// Ese token es lo que permite leer el grupo familiar (`IFamilyGroupsService`).
-/// La clave de Web API no sirve para eso.
+/// Ese token es la única credencial de la app: permite leer el grupo familiar
+/// (`IFamilyGroupsService`) y la actividad reciente.
 ///
-/// Reglas (las mismas que para la clave de API):
+/// Reglas:
 /// - El token **nunca** se guarda en SQLite, en JSON, en preferencias
 ///   ordinarias ni en recursos de la aplicación.
 /// - Solo se escribe en el almacenamiento seguro del dispositivo (Keystore en

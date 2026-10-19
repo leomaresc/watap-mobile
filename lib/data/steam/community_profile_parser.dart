@@ -3,9 +3,10 @@
 /// Steam Community publica el XML **oficial** de un perfil en
 /// `https://steamcommunity.com/profiles/{id}?xml=1` (y en
 /// `/id/{nombre}?xml=1`) sin necesidad de ninguna credencial. WATAP lo usa
-/// **únicamente cuando no hay clave de Web API** para obtener el nombre, el
-/// avatar y la visibilidad: son datos estructurados de un endpoint público,
-/// **nunca se analiza HTML** (no hay *scraping*).
+/// **como única fuente** del nombre, el avatar y la visibilidad: son datos
+/// estructurados de un endpoint público, **nunca se analiza HTML** (no hay
+/// *scraping*). (`ISteamUser/GetPlayerSummaries` exige una clave de Web API
+/// que WATAP no usa.)
 ///
 /// Parseo defensivo con `package:xml`:
 /// - `<response><error>…</error></response>` → el perfil no existe.
@@ -35,8 +36,8 @@ class CommunityProfile {
   /// `communityvisibilitystate` de `GetPlayerSummaries`).
   final int? communityVisibilityState;
 
-  /// Convierte al mismo modelo que produce `GetPlayerSummaries`, de modo que
-  /// los dos caminos (clave y XML) sean indistinguibles para el resto de la app.
+  /// Convierte al modelo de datos público del perfil, de modo que la capa de
+  /// servicios no distingue de dónde vinieron los datos.
   ///
   /// [fallbackSteamId64] es el identificador consultado, por si el XML no lo
   /// trajera (se pidió por esa vía, así que es válido).

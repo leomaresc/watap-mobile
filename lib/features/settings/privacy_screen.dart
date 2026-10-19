@@ -4,7 +4,6 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../core/constants.dart';
-import '../../data/steam/steam_api_urls.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/ui_helpers.dart';
 
@@ -28,11 +27,10 @@ class PrivacyScreen extends StatelessWidget {
           ),
           const _Paragraph(
             title: 'Las credenciales viven en el almacén seguro',
-            body: 'La clave de Steam Web API (opcional) y el token temporal de '
-                'sesión se guardan con el almacén seguro de la plataforma '
-                '(Keystore en Android, Keychain en iOS), bajo las referencias '
-                '"${AppConstants.apiKeyStorageKey}" y '
-                '"${AppConstants.steamTokenStorageKey}". Nunca se escriben en '
+            body: 'El token temporal de sesión de Steam se guarda con el almacén '
+                'seguro de la plataforma (Keystore en Android, Keychain en '
+                'iOS), bajo la referencia '
+                '"${AppConstants.steamTokenStorageKey}". Nunca se escribe en '
                 'SQLite, en archivos JSON, en preferencias ordinarias, en los '
                 'recursos de la aplicación ni en los registros.',
           ),
@@ -41,12 +39,11 @@ class PrivacyScreen extends StatelessWidget {
             body: 'Solo se realizan las solicitudes necesarias a la Steam Web API '
                 '(${AppConstants.steamApiBaseUrl}), la consulta del perfil '
                 'público en XML de Steam Community '
-                '(${AppConstants.steamCommunityHost}, solo cuando no hay clave '
-                'de Web API y siempre sin credencial), la carga de la página '
+                '(${AppConstants.steamCommunityHost}, siempre sin '
+                'credencial), la carga de la página '
                 'oficial de Steam en el WebView y las descargas de portadas y '
-                'avatares desde el CDN público de imágenes de Steam. La clave '
-                'viaja en el encabezado "${AppConstants.steamApiKeyHeader}"; '
-                'el token de sesión viaja como parámetro de la URL sobre la '
+                'avatares desde el CDN público de imágenes de Steam. El token '
+                'de sesión viaja como parámetro de la URL sobre la '
                 'conexión HTTPS directa a la Steam Web API (como hace la '
                 'propia web de Steam), jamás a steamcommunity.com, y nunca se '
                 'registra.',
@@ -77,16 +74,6 @@ class PrivacyScreen extends StatelessWidget {
             title: 'ENLACES OFICIALES',
             children: <Widget>[
               ListTile(
-                leading: const Icon(Icons.key_outlined),
-                title: const Text('Obtener una clave de Steam Web API'),
-                subtitle: const Text(AppConstants.steamApiKeyRegistrationUrl),
-                onTap: () => openExternalUrl(
-                  context,
-                  SteamApiUrls.apiKeyRegistration(),
-                  action: 'abrir la página de registro',
-                ),
-              ),
-              ListTile(
                 leading: const Icon(Icons.menu_book_outlined),
                 title: const Text('Documentación de la Steam Web API'),
                 subtitle: const Text(AppConstants.steamWebApiDocsUrl),
@@ -110,10 +97,10 @@ class PrivacyScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           const Text(
-            'Transparencia: el almacenamiento seguro protege la clave en reposo, '
-            'pero ninguna aplicación cliente puede garantizar protección '
-            'absoluta frente a un dispositivo comprometido o con ejecución '
-            'instrumentada.',
+            'Transparencia: el almacenamiento seguro protege el token en '
+            'reposo, pero ninguna aplicación cliente puede garantizar '
+            'protección absoluta frente a un dispositivo comprometido o con '
+            'ejecución instrumentada.',
             style: TextStyle(
               fontSize: 11.5,
               color: WatapColors.textSecondary,

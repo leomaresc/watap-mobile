@@ -1,9 +1,9 @@
 /// Apertura y ciclo de vida de la base de datos SQLite local.
 ///
 /// La base de datos contiene perfiles, actividades, juegos, preferencias y
-/// metadatos de caché. **Nunca contiene la clave de la Steam Web API**, que se
-/// guarda exclusivamente en el almacenamiento seguro del dispositivo
-/// (ver `SecureApiKeyStore`).
+/// metadatos de caché. **Nunca contiene credenciales**: el token de sesión de
+/// Steam se guarda exclusivamente en el almacenamiento seguro del dispositivo
+/// (ver `SteamTokenStore`).
 library;
 
 import 'dart:async';

@@ -128,13 +128,12 @@ String describeFetchStatus(FetchStatus status) => switch (status) {
       FetchStatus.privateOrUnavailable =>
         'El perfil es privado o sus datos no están disponibles',
       FetchStatus.networkError => 'Sin conexión con Steam',
-      FetchStatus.invalidApiKey => 'Clave de Steam Web API no válida',
       FetchStatus.invalidProfile => 'Perfil no encontrado o no válido',
       FetchStatus.rateLimited => 'Steam ha limitado las solicitudes',
       FetchStatus.malformedResponse =>
         'Steam devolvió una respuesta con un formato inesperado',
       FetchStatus.incompleteConfiguration =>
-        'Falta una credencial de Steam (conexión o clave de API)',
+        'Falta la conexión con tu cuenta de Steam',
     };
 
 /// Aclaración adicional (más larga) para estados que suelen confundirse.
@@ -147,8 +146,6 @@ String explainFetchStatus(FetchStatus status) => switch (status) {
         'Steam no ha entregado los datos. Puede deberse a la configuración de '
             'privacidad del perfil ("Detalles del juego" restringidos) o a que '
             'el perfil no existe.',
-      FetchStatus.invalidApiKey =>
-        'Steam ha rechazado la clave. Comprueba la clave configurada en Ajustes.',
       FetchStatus.rateLimited =>
         'Steam ha devuelto un error 429. Espera antes de volver a intentarlo.',
       FetchStatus.networkError =>

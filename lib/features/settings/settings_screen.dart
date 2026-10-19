@@ -7,14 +7,12 @@ import 'package:flutter/services.dart';
 import '../../core/constants.dart';
 import '../../core/models.dart';
 import '../../core/validators.dart';
-import '../../data/steam/steam_api_client.dart';
 import '../../services/family_group_sync.dart';
 import '../../state/app_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/ui_helpers.dart';
 import '../about/about_screen.dart';
 import '../onboarding/steam_connect_screen.dart';
-import 'api_key_screen.dart';
 import 'privacy_screen.dart';
 
 /// Pantalla de configuración de WATAP.
@@ -105,57 +103,6 @@ class SettingsScreen extends StatelessWidget {
                 },
               ),
             ],
-          ],
-        ),
-        const SizedBox(height: 16),
-        SectionCard(
-          title: 'CLAVE DE WEB API (OPCIONAL)',
-          subtitle: 'Respaldo por si la conexión con Steam no funciona. Se '
-              'guarda solo en el almacenamiento seguro del dispositivo',
-          children: <Widget>[
-            ListTile(
-              leading: Icon(
-                controller.hasApiKey ? Icons.key : Icons.key_off_outlined,
-                color: controller.hasApiKey
-                    ? WatapColors.success
-                    : WatapColors.textSecondary,
-              ),
-              title: Text(
-                controller.hasApiKey ? 'Clave configurada' : 'Sin clave configurada',
-              ),
-              subtitle: Text(
-                controller.hasApiKey
-                    ? 'Guardada en el almacén seguro. WATAP no muestra su '
-                        'contenido ni la incluye en registros.'
-                    : 'No hace falta normalmente: la conexión con Steam ya '
-                        'autentica las consultas. Solo se usa como respaldo.',
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (BuildContext _) => const ApiKeyScreen(),
-                ),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.verified_outlined),
-              title: const Text('Verificar la clave'),
-              subtitle: const Text(
-                'Realiza una consulta real a Steam para comprobar la '
-                'configuración',
-              ),
-              onTap: controller.hasApiKey
-                  ? () async {
-                      final ApiKeyCheckResult result = await controller.verifyApiKey();
-                      if (!context.mounted) return;
-                      showMessage(
-                        context,
-                        result.messageEs,
-                        isError: result.keyAccepted == false,
-                      );
-                    }
-                  : null,
-            ),
           ],
         ),
         const SizedBox(height: 16),

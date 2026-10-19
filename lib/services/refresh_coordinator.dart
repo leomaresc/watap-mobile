@@ -211,22 +211,22 @@ class RefreshCoordinator {
   }) async {
     final String id = profile.steamId64;
 
-    if (!_api.hasSteamAuth) {
+    if (!_api.hasAccessToken) {
       return ProfileActivity(
         steamId64: id,
         personaName: profile.personaName,
         avatarUrl: profile.avatarUrl,
         status: FetchStatus.incompleteConfiguration,
-        statusMessage: 'Conecta tu Steam o guarda una clave de Steam Web API '
-            'en Ajustes para consultar perfiles reales.',
+        statusMessage: 'Conecta tu cuenta de Steam en Ajustes para consultar '
+            'perfiles reales.',
       );
     }
 
     try {
       // 1) Datos públicos del perfil (nombre, avatar, visibilidad).
-      final List<SteamPlayerSummary> summaries =
-          await _api.fetchPlayerSummaries(<String>[id]);
-      final SteamPlayerSummary? summary = _firstOrNull(summaries, id);
+      final List<SteamPlayerSummary> publicProfiles =
+          await _api.fetchPublicProfiles(<String>[id]);
+      final SteamPlayerSummary? summary = _firstOrNull(publicProfiles, id);
 
       if (summary == null) {
         return ProfileActivity(
@@ -260,13 +260,12 @@ class RefreshCoordinator {
       try {
         recent = await _api.fetchRecentlyPlayedGames(id);
       } on SteamApiException catch (e) {
-        // El perfil sí es público (lo acaba de confirmar el resumen o el XML)
-        // pero Steam rechaza la consulta de juegos. Con solo el token no se
-        // puede descartar que este endpoint exija clave, así que se informan
-        // las dos causas posibles en lugar de afirmar "perfil privado".
+        // El perfil sí es público (lo acaba de confirmar el XML) pero Steam
+        // rechaza la consulta de juegos. Se informa de las dos causas posibles
+        // —privacidad de los "Detalles del juego" o token que no cubre este
+        // endpoint— en lugar de afirmar "perfil privado".
         if (e.kind == SteamApiErrorKind.privateOrUnavailable &&
-            visibility == 3 &&
-            !_api.hasApiKey) {
+            visibility == 3) {
           return ProfileActivity(
             steamId64: id,
             personaName: summary.personaName ?? profile.personaName,
@@ -274,9 +273,8 @@ class RefreshCoordinator {
             status: FetchStatus.incompleteConfiguration,
             statusMessage: 'Steam no entrega los juegos recientes con la '
                 'sesión actual: pueden ser los "Detalles del juego" privados '
-                'o que esta consulta exige una clave de Web API. Puedes '
-                'volver a conectar tu Steam o guardar una clave en Ajustes '
-                '(respaldo).',
+                'o que tu sesión no cubre esta consulta. Vuelve a conectar tu '
+                'Steam desde Ajustes e inténtalo de nuevo.',
           );
         }
         rethrow;

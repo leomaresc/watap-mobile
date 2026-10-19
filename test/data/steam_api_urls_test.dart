@@ -1,7 +1,9 @@
 /// Pruebas de construcción de URLs.
 ///
-/// El punto más importante: **ninguna URL contiene la clave de API**. La clave
-/// viaja en un encabezado (ver `steam_api_client_test.dart`).
+/// El punto más importante: **ninguna URL contiene una credencial por sí
+/// misma**. El `access_token` lo añade el cliente únicamente para
+/// `api.steampowered.com` (ver `steam_api_client_test.dart`); las URLs del XML
+/// público de Steam Community se emiten siempre sin credencial.
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -20,30 +22,29 @@ void main() {
       expect(uri.queryParameters['format'], 'json');
     });
 
-    test('nunca incluye la clave', () {
+    test('nunca incluye una credencial por sí misma', () {
       final Uri uri = SteamApiUrls.recentlyPlayed('76561198000000000');
       expect(uri.queryParameters.containsKey('key'), isFalse);
+      expect(uri.queryParameters.containsKey('access_token'), isFalse);
     });
   });
 
-  group('playerSummaries', () {
-    test('une los identificadores por comas y descarta vacíos', () {
-      final Uri uri = SteamApiUrls.playerSummaries(<String>['1', '', '2']);
-      expect(uri.queryParameters['steamids'], '1,2');
+  group('grupo familiar', () {
+    test('familyGroupForUser lleva el token como access_token en GET', () {
+      final Uri uri = SteamApiUrls.familyGroupForUser('token-ejemplo');
+      expect(uri.scheme, 'https');
+      expect(uri.host, 'api.steampowered.com');
+      expect(uri.path, SteamApiEndpoints.familyGroupForUser);
+      expect(uri.queryParameters['access_token'], 'token-ejemplo');
+      expect(uri.queryParameters['format'], 'json');
+      expect(uri.queryParameters.containsKey('key'), isFalse);
     });
 
-    test('limita a 100 identificadores por llamada', () {
-      final List<String> ids =
-          List<String>.generate(150, (int i) => i.toString());
-      final Uri uri = SteamApiUrls.playerSummaries(ids);
-      expect(uri.queryParameters['steamids']!.split(','), hasLength(100));
-    });
-  });
-
-  group('resolveVanityUrl', () {
-    test('recorta el nombre personalizado', () {
-      final Uri uri = SteamApiUrls.resolveVanityUrl('  nombre  ');
-      expect(uri.queryParameters['vanityurl'], 'nombre');
+    test('familyGroup incluye el identificador del grupo', () {
+      final Uri uri = SteamApiUrls.familyGroup('token-ejemplo', '42');
+      expect(uri.path, SteamApiEndpoints.familyGroup);
+      expect(uri.queryParameters['access_token'], 'token-ejemplo');
+      expect(uri.queryParameters['family_groupid'], '42');
     });
   });
 
@@ -95,13 +96,6 @@ void main() {
       expect(
         SteamApiUrls.communityVanity('nombre').toString(),
         'https://steamcommunity.com/id/nombre',
-      );
-    });
-
-    test('apiKeyRegistration apunta a la página oficial de Steam', () {
-      expect(
-        SteamApiUrls.apiKeyRegistration().toString(),
-        AppConstants.steamApiKeyRegistrationUrl,
       );
     });
   });

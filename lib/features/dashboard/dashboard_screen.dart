@@ -59,8 +59,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget build(BuildContext context) {
     final AppController controller = AppScope.of(context);
 
-    // Sin clave de API la aplicación no puede consultar nada: se muestra el
-    // asistente de configuración en lugar del panel principal.
+    // Sin conexión con Steam ni omisión explícita, la aplicación no puede
+    // consultar nada: se muestra el asistente de configuración.
     if (!controller.onboardingComplete) {
       return const OnboardingScreen();
     }
