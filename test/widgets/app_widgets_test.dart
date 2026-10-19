@@ -96,7 +96,7 @@ void main() {
     expect(retries, 1);
   });
 
-  testWidgets('sin clave se muestra el asistente de configuración',
+  testWidgets('sin credenciales se muestra el asistente de configuración',
       (WidgetTester tester) async {
     final FakeHttpClient fake =
         FakeHttpClient((http.Request _) => jsonResponse('{}'));
@@ -107,7 +107,7 @@ void main() {
 
     expect(env.controller.onboardingComplete, isFalse);
     expect(find.text('Configuración inicial'), findsOneWidget);
-    expect(find.text('Clave de Steam Web API'), findsWidgets);
+    expect(find.text('Conectar con Steam'), findsWidgets);
     expect(fake.callCount, 0);
   });
 

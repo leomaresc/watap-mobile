@@ -114,7 +114,7 @@ class _AddEditProfileScreenState extends State<AddEditProfileScreen> {
                           ),
                         ),
                         const SizedBox(height: 6),
-                        Text(
+                        const Text(
                           'Perfil supervisado',
                           style: TextStyle(
                             fontSize: 11.5,
@@ -176,11 +176,11 @@ class _AddEditProfileScreenState extends State<AddEditProfileScreen> {
                 ),
               ],
               const SizedBox(height: 10),
-              if (!controller.hasApiKey)
+              if (!controller.hasSteamAuth)
                 const InlineNotice(
-                  message: 'Sin clave de Web API solo se puede guardar el perfil: '
-                      'el nombre y la actividad se obtendrán cuando la '
-                      'configures en Ajustes.',
+                  message: 'Sin credencial de Steam solo se puede guardar el '
+                      'perfil: el nombre y la actividad se obtendrán cuando '
+                      'conectes tu Steam o guardes una clave en Ajustes.',
                   icon: Icons.key_off_outlined,
                   color: WatapColors.warning,
                 ),

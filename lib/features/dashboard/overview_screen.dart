@@ -47,15 +47,17 @@ class OverviewScreen extends StatelessWidget {
     if (games.isEmpty) {
       return EmptyState(
         title: 'Todavía no hay actividad que agregar',
-        message: controller.hasApiKey
+        message: controller.hasSteamAuth
             ? 'Actualiza los integrantes para obtener sus juegos recientes. '
                 'Si sus perfiles son privados, Steam no entregará los datos.'
-            : 'Configura tu clave de Steam Web API en Ajustes y actualiza los '
-                'integrantes para ver aquí la actividad combinada.',
+            : 'Conecta tu Steam (o guarda una clave de API en Ajustes) y '
+                'actualiza los integrantes para ver aquí la actividad '
+                'combinada.',
         icon: Icons.insights_outlined,
-        actionLabel: controller.hasApiKey ? 'Actualizar integrantes' : 'Ir a Ajustes',
+        actionLabel:
+            controller.hasSteamAuth ? 'Actualizar integrantes' : 'Ir a Ajustes',
         onAction: () {
-          if (controller.hasApiKey) {
+          if (controller.hasSteamAuth) {
             controller.refreshAll();
           } else {
             controller.setSection(AppSection.settings);

@@ -113,7 +113,8 @@ class AboutScreen extends StatelessWidget {
             title: 'Estado de los datos en esta sesión',
             body: 'Perfiles reales guardados: ${controller.profiles.length}. '
                 'Juegos almacenados: ${controller.gamesStoredCount}. '
-                'Clave de API: ${controller.hasApiKey ? "configurada" : "no configurada"}.',
+                'Conexión Steam: ${controller.hasFamilyToken ? "conectada" : "no conectada"} · '
+                'Clave de API: ${controller.hasApiKey ? "configurada" : "no configurada"} (opcional).',
           ),
           SectionCard(
             title: 'ENLACES',

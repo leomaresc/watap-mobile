@@ -2,8 +2,12 @@
 ///
 /// **Este servicio no funciona con la clave de Web API**: Steam solo lo expone
 /// a un `access_token` de una sesión de Steam iniciada (el `webapi_token` de la
-/// sesión de la tienda). El token se envía en el cuerpo del `POST`, nunca en la
-/// URL, para que no aparezca en rutas ni registros.
+/// sesión de la tienda).
+///
+/// Steam exige **GET** para este servicio: el `POST` responde HTTP 405
+/// («This API must be called with a HTTP GET request»). Por eso el token viaja
+/// como parámetro `access_token` de la URL, sobre una conexión HTTPS directa a
+/// `api.steampowered.com`, y nunca se escribe en un registro.
 ///
 /// Es un endpoint **interno** (no documentado por Valve), por lo que todas las
 /// respuestas se interpretan de forma defensiva.
@@ -36,9 +40,8 @@ class FamilyGroupsClient {
 
   /// Consulta el identificador del grupo familiar de la cuenta autenticada.
   Future<FamilyGroupForUser> getFamilyGroupForUser(String accessToken) async {
-    final String body = await _post(
-      SteamApiUrls.familyGroupForUser(),
-      <String, String>{'access_token': accessToken},
+    final String body = await _get(
+      SteamApiUrls.familyGroupForUser(accessToken),
       endpoint: 'GetFamilyGroupForUser',
     );
     return parseFamilyGroupForUser(body);
@@ -49,12 +52,8 @@ class FamilyGroupsClient {
     required String accessToken,
     required String familyGroupId,
   }) async {
-    final String body = await _post(
-      SteamApiUrls.familyGroup(),
-      <String, String>{
-        'access_token': accessToken,
-        'family_groupid': familyGroupId,
-      },
+    final String body = await _get(
+      SteamApiUrls.familyGroup(accessToken, familyGroupId),
       endpoint: 'GetFamilyGroup',
     );
     return parseFamilyGroup(body, familyGroupId: familyGroupId);
@@ -66,13 +65,12 @@ class FamilyGroupsClient {
 
   // -------------------------------------------------------------------------
 
-  /// Envía un `POST` con campos de formulario.
+  /// Envía un `GET` con los parámetros ya incluidos en la URL.
   ///
-  /// El `access_token` viaja en el **cuerpo**, nunca en la URL. Se exige HTTPS
-  /// y se aplica un tiempo de espera finito.
-  Future<String> _post(
-    Uri uri,
-    Map<String, String> fields, {
+  /// Steam exige `GET` en este servicio. Se exige HTTPS y se aplica un tiempo
+  /// de espera finito.
+  Future<String> _get(
+    Uri uri, {
     required String endpoint,
   }) async {
     if (uri.scheme != 'https') {
@@ -86,13 +84,9 @@ class FamilyGroupsClient {
     http.Response response;
     try {
       response = await _client
-          .post(
+          .get(
             uri,
-            headers: const <String, String>{
-              'Accept': 'application/json',
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: fields,
+            headers: const <String, String>{'Accept': 'application/json'},
           )
           .timeout(_timeout);
     } on TimeoutException {

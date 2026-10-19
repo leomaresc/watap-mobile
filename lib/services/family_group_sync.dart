@@ -126,7 +126,7 @@ class FamilyGroupSyncService {
   Future<Map<String, SteamPlayerSummary>> _loadSummaries(
     List<String> steamIds,
   ) async {
-    if (!_api.hasApiKey || steamIds.isEmpty) {
+    if (!_api.hasSteamAuth || steamIds.isEmpty) {
       return const <String, SteamPlayerSummary>{};
     }
     try {

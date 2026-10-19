@@ -102,7 +102,7 @@ void main() {
   // --- Cliente ---------------------------------------------------------------
 
   group('FamilyGroupsClient', () {
-    test('el access_token viaja en el cuerpo, nunca en la URL', () async {
+    test('Steam exige GET: el token viaja en la URL, sin clave ni cuerpo', () async {
       final FakeHttpClient fake = FakeHttpClient(
         (http.Request _) => jsonResponse(_forUserJson),
       );
@@ -113,14 +113,17 @@ void main() {
       client.dispose();
 
       final RecordedRequest request = fake.requests.single;
+      expect(request.request.method, 'GET',
+          reason: 'El POST responde HTTP 405 en este servicio.');
       expect(request.uri.path, contains('GetFamilyGroupForUser'));
-      expect(request.uri.queryParameters.containsKey('access_token'), isFalse);
-      expect(request.hasKeyInUrl, isFalse);
-      expect(request.body, contains('access_token=$_token'));
-      expect(request.headers['content-type'], contains('form-urlencoded'));
+      expect(request.uri.queryParameters['access_token'], _token);
+      expect(request.uri.queryParameters['format'], 'json');
+      expect(request.hasKeyInUrl, isFalse,
+          reason: 'Este servicio no acepta claves de Web API.');
+      expect(request.body, isEmpty, reason: 'Un GET no lleva cuerpo.');
     });
 
-    test('GetFamilyGroup envía grupo y token en el cuerpo', () async {
+    test('GetFamilyGroup envía token e identificador en la URL', () async {
       final FakeHttpClient fake = FakeHttpClient(
         (http.Request _) => jsonResponse(_groupJson),
       );
@@ -135,8 +138,10 @@ void main() {
 
       expect(group.members, hasLength(2));
       final RecordedRequest request = fake.requests.single;
-      expect(request.uri.queryParameters.containsKey('access_token'), isFalse);
-      expect(request.body, contains('family_groupid=$_groupId'));
+      expect(request.request.method, 'GET');
+      expect(request.uri.queryParameters['access_token'], _token);
+      expect(request.uri.queryParameters['family_groupid'], _groupId);
+      expect(request.hasKeyInUrl, isFalse);
     });
 
     test('401/403 se traducen a token caducado', () async {

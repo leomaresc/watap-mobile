@@ -211,14 +211,14 @@ class RefreshCoordinator {
   }) async {
     final String id = profile.steamId64;
 
-    if (!_api.hasApiKey) {
+    if (!_api.hasSteamAuth) {
       return ProfileActivity(
         steamId64: id,
         personaName: profile.personaName,
         avatarUrl: profile.avatarUrl,
         status: FetchStatus.incompleteConfiguration,
-        statusMessage: 'Configura tu clave de Steam Web API en Ajustes para '
-            'consultar perfiles reales.',
+        statusMessage: 'Conecta tu Steam o guarda una clave de Steam Web API '
+            'en Ajustes para consultar perfiles reales.',
       );
     }
 

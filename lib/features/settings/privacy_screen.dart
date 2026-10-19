@@ -27,27 +27,33 @@ class PrivacyScreen extends StatelessWidget {
                 'privada del sistema de archivos de la aplicación.',
           ),
           const _Paragraph(
-            title: 'La clave vive en el almacén seguro',
-            body: 'La clave de Steam Web API se guarda con el almacén seguro de '
-                'la plataforma (Keystore en Android, Keychain en iOS), bajo la '
-                'referencia "${AppConstants.apiKeyStorageKey}". Nunca se escribe '
-                'en SQLite, en archivos JSON, en preferencias ordinarias, en los '
+            title: 'Las credenciales viven en el almacén seguro',
+            body: 'La clave de Steam Web API (opcional) y el token temporal de '
+                'sesión se guardan con el almacén seguro de la plataforma '
+                '(Keystore en Android, Keychain en iOS), bajo las referencias '
+                '"${AppConstants.apiKeyStorageKey}" y '
+                '"${AppConstants.steamTokenStorageKey}". Nunca se escriben en '
+                'SQLite, en archivos JSON, en preferencias ordinarias, en los '
                 'recursos de la aplicación ni en los registros.',
           ),
           const _Paragraph(
             title: 'Qué se envía y a dónde',
             body: 'Solo se realizan las solicitudes necesarias a la Steam Web API '
-                '(${AppConstants.steamApiBaseUrl}) y las descargas de portadas y '
-                'avatares desde el CDN público de imágenes de Steam. La clave '
-                'viaja en el encabezado "${AppConstants.steamApiKeyHeader}" de '
-                'esas solicitudes, no en la URL.',
+                '(${AppConstants.steamApiBaseUrl}), la carga de la página oficial '
+                'de Steam en el WebView y las descargas de portadas y avatares '
+                'desde el CDN público de imágenes de Steam. La clave viaja en el '
+                'encabezado "${AppConstants.steamApiKeyHeader}"; el token de '
+                'sesión viaja como parámetro de la URL sobre la conexión HTTPS '
+                'directa a Steam (como hace la propia web de Steam) y nunca se '
+                'registra.',
           ),
           const _Paragraph(
             title: 'Qué no incluye WATAP',
             body: 'No hay telemetría, analítica, publicidad, cuentas propias ni '
                 'sincronización entre dispositivos. Tampoco se leen archivos '
-                'locales de Steam del ordenador, ni cookies de sesión, ni se '
-                'usan endpoints privados o no documentados.',
+                'locales de Steam del ordenador, ni cookies de sesión, ni la '
+                'contraseña de Steam: el inicio de sesión ocurre únicamente en '
+                'la página oficial de Valve dentro del WebView.',
           ),
           const _Paragraph(
             title: 'Permisos',

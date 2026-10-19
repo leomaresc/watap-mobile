@@ -57,11 +57,11 @@ void main() {
   initTestDatabaseFactory();
 
   group('configuración inicial', () {
-    test('sin clave la app no está lista', () async {
+    test('sin credenciales la app no está lista', () async {
       final TestEnvironment env = await buildTestEnvironment(httpClient: _fake());
       addTearDown(env.dispose);
 
-      expect(env.controller.hasApiKey, isFalse);
+      expect(env.controller.hasSteamAuth, isFalse);
       expect(env.controller.onboardingComplete, isFalse);
       expect(env.controller.profiles, isEmpty);
     });
@@ -76,12 +76,37 @@ void main() {
 
       expect(env.controller.hasApiKey, isTrue);
       expect(env.controller.hasFamilyToken, isTrue);
+      expect(env.controller.hasSteamAuth, isTrue);
       expect(env.controller.onboardingComplete, isTrue);
     });
 
-    test('con clave y el paso omitido, la app también está lista', () async {
+    test('solo el token de Steam basta para tener la app lista', () async {
+      final TestEnvironment env = await buildTestEnvironment(
+        httpClient: _fake(),
+        steamToken: 'token-sin-clave',
+      );
+      addTearDown(env.dispose);
+
+      expect(env.controller.hasApiKey, isFalse,
+          reason: 'El token debe bastar sin pedir clave de Web API.');
+      expect(env.controller.hasFamilyToken, isTrue);
+      expect(env.controller.hasSteamAuth, isTrue);
+      expect(env.controller.onboardingComplete, isTrue);
+    });
+
+    test('solo la clave (respaldo) también da por superado el asistente',
+        () async {
       final TestEnvironment env =
           await buildTestEnvironment(httpClient: _fake(), apiKey: _key);
+      addTearDown(env.dispose);
+
+      expect(env.controller.hasFamilyToken, isFalse);
+      expect(env.controller.onboardingComplete, isTrue);
+    });
+
+    test('sin credenciales, omitir el paso da por completado el asistente',
+        () async {
+      final TestEnvironment env = await buildTestEnvironment(httpClient: _fake());
       addTearDown(env.dispose);
 
       expect(env.controller.onboardingComplete, isFalse);
@@ -90,6 +115,7 @@ void main() {
 
       expect(env.controller.onboardingComplete, isTrue);
       expect(env.controller.hasFamilyToken, isFalse);
+      expect(env.controller.hasSteamAuth, isFalse);
     });
   });
 

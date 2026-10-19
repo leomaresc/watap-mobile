@@ -5,6 +5,11 @@
 /// viaja en el encabezado `x-webapi-key` (ver `SteamApiClient`), de modo que no
 /// aparece en rutas, cachés intermedias ni registros.
 ///
+/// El `access_token` de sesión sí viaja como parámetro de la URL — Steam exige
+/// `GET` y esa es la forma en que la propia web de Steam lo envía. Va siempre
+/// sobre una conexión HTTPS directa a `api.steampowered.com` y **nunca** se
+/// registra en la aplicación.
+///
 /// Funciones puras y probadas en `test/data/steam_api_urls_test.dart`.
 library;
 
@@ -86,13 +91,28 @@ class SteamApiUrls {
 
   /// `IFamilyGroupsService/GetFamilyGroupForUser/v1`
   ///
-  /// El `access_token` **nunca** va en la URL: se envía en el cuerpo del POST.
-  static Uri familyGroupForUser() =>
-      Uri.parse('$_apiBase${SteamApiEndpoints.familyGroupForUser}');
+  /// Steam exige **GET** para este servicio (el `POST` devuelve HTTP 405), así
+  /// que el `access_token` viaja como parámetro de la URL sobre una conexión
+  /// HTTPS directa a `api.steampowered.com`.
+  static Uri familyGroupForUser(String accessToken) {
+    return Uri.parse('$_apiBase${SteamApiEndpoints.familyGroupForUser}').replace(
+      queryParameters: <String, String>{
+        'access_token': accessToken.trim(),
+        'format': 'json',
+      },
+    );
+  }
 
   /// `IFamilyGroupsService/GetFamilyGroup/v1`
-  static Uri familyGroup() =>
-      Uri.parse('$_apiBase${SteamApiEndpoints.familyGroup}');
+  static Uri familyGroup(String accessToken, String familyGroupId) {
+    return Uri.parse('$_apiBase${SteamApiEndpoints.familyGroup}').replace(
+      queryParameters: <String, String>{
+        'access_token': accessToken.trim(),
+        'family_groupid': familyGroupId,
+        'format': 'json',
+      },
+    );
+  }
 
   /// Portada oficial del juego en el CDN público de Steam.
   ///

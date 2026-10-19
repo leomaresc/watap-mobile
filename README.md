@@ -9,9 +9,8 @@ conjunto de perfiles que tú añades manualmente: cuántos minutos ha registrado
 Steam para cada juego en las últimas dos semanas y su tiempo acumulado.
 
 La aplicación está pensada para ser **honesta con los datos**: nunca presenta un
-cero engañoso cuando Steam no ha comunicado un valor, distingue "no hay juegos
-recientes" de "el perfil es privado o no está disponible", y marca de forma
-inequívoca los datos ficticios del modo demostración.
+cero engañoso cuando Steam no ha comunicado un valor, y distingue "no hay
+juegos recientes" de "el perfil es privado o no está disponible".
 
 > **WATAP Mobile es un proyecto independiente.** No está afiliado, asociado,
 > autorizado ni respaldado por Valve Corporation. Steam es una marca registrada
@@ -56,7 +55,7 @@ acotada:
 WATAP no intenta ser una red social, ni un rastreador de estado en tiempo real,
 ni un panel de grupos familiares de Steam. Es una **herramienta de consulta**
 que resume, en una sola pantalla, información que Steam ya publica a través de
-su **Web API pública y documentada**.
+su **Web API** y de los mismos servicios que usa el cliente oficial de Steam.
 
 Idioma de la interfaz: **español**.
 
@@ -64,10 +63,13 @@ Idioma de la interfaz: **español**.
 
 ## 2. Qué hace
 
-- **Importa tus integrantes automáticamente desde tu grupo familiar de Steam.**
-  Conectas tu cuenta una vez (con la página oficial de Steam en un WebView) y
-  WATAP lee tu familia con `IFamilyGroupsService`, añadiendo cada integrante
-  con su nombre público y avatar. **No tienes que copiar enlaces a mano.**
+- **Un solo paso de configuración: conectar tu cuenta de Steam.** Conectas una
+  vez (con la página oficial de Steam en un WebView) y WATAP:
+  - lee tu grupo familiar con `IFamilyGroupsService` e **importa tus
+    integrantes automáticamente**, con su nombre público y avatar; y
+  - consulta la actividad de cada uno con el **mismo token de sesión**.
+  **No hace falta pedir una clave de API ni copiar enlaces a mano.** La clave de
+  Web API queda como **respaldo opcional** por si la conexión no funciona.
 - **Importar integrantes a mano (respaldo)**: pega una lista de SteamID64, URLs
   de perfil o nombres personalizados. Cada entrada se procesa individualmente:
   una inválida no aborta el resto.
@@ -82,9 +84,9 @@ Idioma de la interfaz: **español**.
   siempre por **AppID**, nunca por nombre de juego.
 - **Vista "Integrantes"**: lista de perfiles con sincronización del grupo
   familiar, edición de alias, apertura en Steam y eliminación.
-- **Vista "Ajustes"**: gestión de la clave de API, conexión con Steam, umbrales
-  de actividad, preferencias de visualización, caché y pantallas de privacidad
-  y "Acerca de".
+- **Vista "Ajustes"**: gestión de la conexión con Steam, la clave de API
+  (opcional), umbrales de actividad, preferencias de visualización, caché y
+  pantallas de privacidad y "Acerca de".
 - **Caché local**: guarda la última consulta correcta y **la conserva** cuando un
   intento posterior falla, marcándola como procedente de la caché.
 
@@ -104,7 +106,7 @@ Estas ausencias son **decisiones deliberadas**, no funciones pendientes:
   temporal después.
 - **No** almacena tu contraseña ni cookies de sesión. Solo guarda un token
   temporal (`webapi_token`) en el almacenamiento seguro, para poder leer el
-  grupo familiar sin volver a pedirte la contraseña.
+  grupo familiar y la actividad sin volver a pedirte la contraseña.
 - **No** ejecuta procesos en segundo plano ni temporizadores periódicos: todo
   ocurre como operaciones asíncronas mientras la aplicación está abierta.
 - **No** envía telemetría, analíticas ni datos de uso a ningún servidor propio.
@@ -144,9 +146,11 @@ Para **usar** la aplicación:
 
 - Android 7.0 (API 24) o superior.
 - Conexión a Internet (solo para consultar Steam y descargar portadas y
-  avatares). El modo demostración funciona sin conexión.
-- Una **clave de Steam Web API** para consultar perfiles reales (no es necesaria
-  para el modo demostración).
+  avatares).
+- **Una conexión con Steam** (un solo paso, con la página oficial en un
+  WebView) para consultar perfiles reales. No se pide ninguna clave de API.
+  La clave de Web API es **opcional**, únicamente como respaldo si la conexión
+  no funciona en tu dispositivo.
 
 Para **compilar** el proyecto:
 
@@ -256,10 +260,15 @@ La versión Release se compila además con `minifyEnabled` y
 
 ---
 
-## 7. Obtener una clave de Steam Web API
+## 7. Obtener una clave de Steam Web API (opcional, solo respaldo)
 
-La aplicación **no incluye ninguna clave** y no funcionará con perfiles reales
-sin una propia. Obtenerla es gratuito:
+> Esta sección es **solo un respaldo**. Con la conexión normal con Steam (un
+> solo paso, sin clave) la aplicación funciona completa. La clave solo hace
+> falta si la conexión con Steam no funciona en tu dispositivo, o si prefieres
+> importar amigos o integrantes a mano sin conectar.
+
+La aplicación **no incluye ninguna clave**. Si necesitas la de respaldo, es
+gratuita:
 
 1. Inicia sesión en Steam en el navegador.
 2. Visita la página oficial:
@@ -276,15 +285,19 @@ sin una propia. Obtenerla es gratuito:
 
 ---
 
-## 8. Configurar la clave en la aplicación
+## 8. Configurar la clave en la aplicación (opcional)
 
 1. Abre **Ajustes** (pestaña inferior derecha).
-2. En la sección **STEAM WEB API**, toca **Sin clave configurada / Clave
-   configurada**.
+2. En la sección **CLAVE DE WEB API (OPCIONAL)**, toca **Sin clave
+   configurada / Clave configurada**.
 3. Pega la clave y guárdala.
 4. Opcional: toca **Verificar la clave**. WATAP hará una consulta **real** a
    `GetPlayerSummaries` (usando tu perfil propio, si lo has marcado, o un perfil
    público conocido de Valve) y te dirá si Steam la acepta.
+
+**Qué cambia con la clave (modo respaldo):** las consultas públicas
+(actividad, resúmenes, nombres personalizados) usan la clave en su lugar del
+token de sesión. El grupo familiar **sigue requiriendo la conexión con Steam**.
 
 **Cómo se guarda la clave:**
 
@@ -297,13 +310,11 @@ sin una propia. Obtenerla es gratuito:
 
 ---
 
-## 9. Conexión con Steam y grupo familiar
+## 9. Conectar con Steam (grupo familiar y actividad)
 
-## 9. Conectar con Steam (grupo familiar)
-
-El grupo familiar **no** se puede leer con la clave de Web API: Steam solo lo
-entrega con un token de una sesión iniciada. WATAP obtiene ese token de la forma
-menos invasiva posible:
+Este es el **único paso de configuración**. El grupo familiar **no** se puede
+leer con la clave de Web API: Steam solo lo entrega con un token de una sesión
+iniciada. WATAP obtiene ese token de la forma menos invasiva posible:
 
 1. En el asistente inicial (o en **Integrantes → Conectar con Steam**), la app
    abre la **página oficial de inicio de sesión de Steam** dentro de un WebView.
@@ -314,17 +325,25 @@ menos invasiva posible:
    del dispositivo (Keystore/Keychain).
 4. Con ese token, WATAP llama a `IFamilyGroupsService/GetFamilyGroupForUser` y
    `GetFamilyGroup` para obtener el nombre de tu familia y sus integrantes.
-5. Cada integrante se añade con su nombre público y avatar (gracias a la clave
-   de Web API) y se marca como `isFamilyMember`.
+5. Cada integrante se añade con su nombre público y avatar, y se marca como
+   `isFamilyMember`. **El mismo token autentica después la actividad de cada
+   integrante** (`GetRecentlyPlayedGames`) y los resúmenes de perfil: no hace
+   falta ninguna clave de API.
 
 ### Cosas importantes
 
 - **Si Steam no acepta el WebView** (a veces pide verificación adicional), puedes
-  **omitir el paso** en el asistente y la app sigue funcionando: solo tendrás
-  que importar integrantes a mano desde Integrantes. El paso se puede repetir
-  más tarde desde Integrantes o Ajustes.
+  **omitir el paso** en el asistente (o usar la clave de respaldo de los
+  apartados 7 y 8) y la app sigue funcionando: solo tendrás que importar
+  integrantes a mano desde Integrantes. El paso se puede repetir más tarde
+  desde Integrantes o Ajustes.
 - **El token caduca**. Cuando eso pasa, WATAP borra el token y te pide conectar
   otra vez. Tus integrantes guardados **no se pierden**.
+- **El token viaja como parámetro `access_token` de la URL.** Steam exige
+  peticiones `GET` en estos servicios, así que esa es la forma en que la propia
+  web de Steam los llama. Las URLs van por una conexión **HTTPS directa** a
+  `api.steampowered.com`, nunca pasan por terceros y **nunca se registran** en
+  la aplicación.
 - **Los perfiles añadidos a mano nunca se borran** al sincronizar. Solo se
   retiran los que estaban en el grupo familiar y ya no lo están.
 - **Si tu cuenta no tiene grupo familiar**, Steam lo indica y no se modifica
@@ -372,7 +391,7 @@ telemetría. Todo vive en tu dispositivo:
 
 | Dato                                   | Dónde se guarda                         |
 | -------------------------------------- | --------------------------------------- |
-| Clave de Steam Web API                 | Almacenamiento seguro (Keystore/Keychain) |
+| Clave de Steam Web API (opcional)      | Almacenamiento seguro (Keystore/Keychain) |
 | Token de sesión de Steam (`webapi_token`) | Almacenamiento seguro (Keystore/Keychain) |
 | Perfiles (SteamID64, nombre, avatar)   | SQLite local                            |
 | Actividad y juegos en caché            | SQLite local                            |
@@ -387,6 +406,9 @@ página de Steam.
 `api.steampowered.com` (Steam Web API e `IFamilyGroupsService`), la carga de la
 página oficial de Steam en el WebView y las descargas de imágenes del CDN
 público de Steam. Nada más. La aplicación no contacta con ningún otro servicio.
+La credencial viaja en el encabezado `x-webapi-key` (clave) o como parámetro
+`access_token` de la URL (token, sobre la conexión HTTPS directa a Steam); en
+ningún caso se escribe en un registro.
 
 Puedes vaciar los datos desde **Ajustes**:
 
@@ -419,9 +441,12 @@ notificaciones.
 
 ## 13. Endpoints de Steam utilizados
 
-### Endpoints públicos y documentados (Steam Web API)
+### Endpoints públicos (Steam Web API)
 
-La clave viaja siempre en el encabezado `x-webapi-key`, nunca en la URL.
+Con la conexión normal (sin clave), la credencial viaja como parámetro
+`access_token` de la URL, sobre la conexión HTTPS directa a Steam. Si has
+configurado la clave de respaldo, esta viaja en el encabezado `x-webapi-key`
+y la URL queda sin credencial.
 
 | Operación              | Endpoint                                              |
 | ---------------------- | ----------------------------------------------------- |
@@ -433,7 +458,8 @@ La clave viaja siempre en el encabezado `x-webapi-key`, nunca en la URL.
 
 Estos endpoints **no están en la documentación pública de Steam** y **no
 aceptan la clave de Web API**: requieren el `webapi_token` de una sesión
-iniciada. El token viaja en el cuerpo del `POST`, nunca en la URL.
+iniciada. Steam exige **`GET`** en este servicio (el `POST` responde HTTP 405),
+así que el token viaja como parámetro `access_token` de la URL.
 
 | Operación                        | Endpoint                                            |
 | -------------------------------- | --------------------------------------------------- |
@@ -530,22 +556,26 @@ Cobertura funcional de la suite:
   persistente y saneado de preferencias.
 - **Agregación**: suma por AppID, acumulados incompletos, ordenaciones, filtros y
   búsqueda.
-- **Red**: encabezado `x-webapi-key` (y ausencia de la clave en la URL), 429 con
-  `Retry-After`, interpretación de 401/403 por endpoint, 400/500, JSON inválido,
-  deduplicación y límite de concurrencia, y verificación de clave.
+- **Red**: encabezado `x-webapi-key` (y ausencia de la clave en la URL),
+  autenticación por token de sesión (`access_token` en la URL, sin cabecera de
+  clave), 429 con `Retry-After`, interpretación de 401/403 por endpoint y por
+  modo de autenticación, 400/500, JSON inválido, deduplicación y límite de
+  concurrencia, y verificación de clave.
 - **Parseo**: respuestas válidas, `{"response":{}}` como "no disponible",
   negativos saturados, datos ausentes como `null`, resolución de *vanity* y lista
   de amigos.
 - **Almacenamiento local**: persistencia, prevención de duplicados, borrado en
   cascada, política de caché, migraciones desde la versión 1 y **aislamiento de
-  la clave de API** (se comprueba que la clave no aparece en ninguna tabla).
-- **Servicios**: datos de demostración (todo marcado como ficticio) y coordinador
-  de actualizaciones (demostración sin red, privacidad, caché ante fallos y
-  concurrencia del flujo).
+  las credenciales** (se comprueba que la clave no aparece en ninguna tabla).
+- **Servicios**: agregador de actividad, coordinador de actualizaciones
+  (privacidad, caché ante fallos y concurrencia del flujo) y **sincronización
+  del grupo familiar** (parseo, reconciliación conservadora, cliente con token,
+  sin clave y sin cuerpo en el `GET`).
 - **Controlador**: modos de arranque, alta/duplicados/resolución de *vanity*,
-  gestión de la clave, actualización y borrado de caché.
-- **Widgets**: estados de carga, error y vacío, arranque en modo demostración sin
-  red, navegación entre secciones y visualización de datos en caché.
+  gestión de la clave y del token de sesión, criterios del asistente (solo
+  token, solo clave u omitido bastan), actualización y borrado de caché.
+- **Widgets**: estados de carga, error y vacío, asistente de configuración de
+  un solo paso, navegación entre secciones y visualización de datos en caché.
 
 Puedes ejecutar una parte concreta, por ejemplo:
 
@@ -584,8 +614,13 @@ pasar" el análisis.**
   WATAP respeta el `Retry-After` (con un tope) y avisa en lugar de insistir.
 - **Perfiles privados**: si los "Detalles del juego" del perfil son privados,
   Steam no entrega la actividad y WATAP no puede mostrarla (ni la inventa).
+- **Alcance del token como credencial**: `IFamilyGroupsService` exige el token
+  (verificado con herramientas de terceros y con la propia app). Para leer la
+  actividad se envía el mismo token, tal como hacen herramientas públicas
+  existentes; si Steam lo rechazara en tu cuenta, WATAP lo indica y te ofrece
+  la **clave de Web API como respaldo** (apartados 7 y 8).
 - **Importación de amigos**: la lista de amigos es privada por defecto; requiere
-  marcarte como "mi perfil" y que la lista sea accesible para tu clave.
+  marcarte como "mi perfil" y que la lista sea accesible con tu credencial.
 
 ---
 

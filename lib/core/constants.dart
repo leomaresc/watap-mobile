@@ -11,7 +11,7 @@ class AppConstants {
   static const String appName = 'WATAP';
   static const String appExpandedName = 'What Are They Actually Playing?';
   static const String appSubtitle = 'Actividad reciente de tus perfiles de Steam';
-  static const String appVersion = '1.0.0';
+  static const String appVersion = '1.4.0';
   static const String appBuild = '1';
 
   // --- Steam ---------------------------------------------------------------

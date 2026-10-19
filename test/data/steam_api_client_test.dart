@@ -1,8 +1,10 @@
 /// Pruebas del cliente HTTP de Steam con un cliente simulado.
 ///
 /// Comprueban, entre otras cosas, que la clave viaja en el encabezado y nunca en
-/// la URL, que un 429 abre una ventana de espera, que la interpretación de
-/// 401/403 depende del endpoint y que se evitan solicitudes duplicadas.
+/// la URL, que el token de sesión viaja como `access_token` cuando no hay clave,
+/// que un 429 abre una ventana de espera, que la interpretación de
+/// 401/403 depende del endpoint y del modo de autenticación y que se evitan
+/// solicitudes duplicadas.
 library;
 
 import 'dart:convert';
@@ -15,6 +17,7 @@ import 'package:watap_mobile/data/steam/steam_api_errors.dart';
 import '../helpers/test_support.dart';
 
 const String _key = 'clave-de-prueba-1234567890abcdef';
+const String _token = 'token-de-sesion-prueba-123';
 
 String _summariesJson(List<String> ids, {int visibility = 3}) => jsonEncode(
       <String, Object?>{
@@ -67,6 +70,73 @@ void main() {
       expect(recorded.apiKeyHeader, _key);
       expect(recorded.hasKeyInUrl, isFalse);
       expect(recorded.uri.toString(), isNot(contains(_key)));
+    });
+  });
+
+  group('autenticación por token de sesión (sin clave)', () {
+    SteamApiClient tokenClient(FakeHttpClient fake) {
+      final SteamApiClient client = SteamApiClient(
+        httpClient: fake.build(),
+        timeout: const Duration(seconds: 5),
+        maxTransientRetries: 0,
+      );
+      client.setAccessToken(_token);
+      return client;
+    }
+
+    test('hasSteamAuth es true solo con token', () {
+      final SteamApiClient client =
+          tokenClient(FakeHttpClient((http.Request _) => jsonResponse('{}')));
+      expect(client.hasApiKey, isFalse);
+      expect(client.hasAccessToken, isTrue);
+      expect(client.hasSteamAuth, isTrue);
+      client.dispose();
+    });
+
+    test('el token viaja como access_token en la URL, sin clave en cabecera',
+        () async {
+      final FakeHttpClient fake = FakeHttpClient(
+        (http.Request _) =>
+            jsonResponse(_summariesJson(<String>['76561198000000000'])),
+      );
+      final SteamApiClient client = tokenClient(fake);
+
+      await client.fetchPlayerSummaries(<String>['76561198000000000']);
+
+      final RecordedRequest recorded = fake.requests.single;
+      expect(recorded.uri.queryParameters['access_token'], _token);
+      expect(recorded.apiKeyHeader, isNull,
+          reason: 'Sin clave no se envía cabecera de credencial.');
+      expect(recorded.hasKeyInUrl, isFalse);
+    });
+
+    test('sin credenciales, la consulta se bloquea antes de salir', () async {
+      final FakeHttpClient fake =
+          FakeHttpClient((http.Request _) => jsonResponse('{}'));
+      final SteamApiClient client = SteamApiClient(
+        httpClient: fake.build(),
+        timeout: const Duration(seconds: 5),
+        maxTransientRetries: 0,
+      );
+
+      await expectLater(
+        client.fetchRecentlyPlayedGames('76561198000000000'),
+        _throwsSteamError(SteamApiErrorKind.incompleteConfiguration),
+      );
+      expect(fake.callCount, 0);
+      client.dispose();
+    });
+
+    test('un 401 en modo token se traduce como sesión caducada, no como clave',
+        () async {
+      final FakeHttpClient fake =
+          FakeHttpClient((http.Request _) => http.Response('', 401));
+      final SteamApiClient client = tokenClient(fake);
+
+      await expectLater(
+        client.fetchPlayerSummaries(<String>['76561198000000000']),
+        _throwsSteamError(SteamApiErrorKind.invalidCredentials),
+      );
     });
   });
 

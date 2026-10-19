@@ -134,7 +134,7 @@ String describeFetchStatus(FetchStatus status) => switch (status) {
       FetchStatus.malformedResponse =>
         'Steam devolvió una respuesta con un formato inesperado',
       FetchStatus.incompleteConfiguration =>
-        'Falta configurar la clave de Steam Web API',
+        'Falta una credencial de Steam (conexión o clave de API)',
     };
 
 /// Aclaración adicional (más larga) para estados que suelen confundirse.

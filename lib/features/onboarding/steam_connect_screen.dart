@@ -137,8 +137,12 @@ class _SteamConnectScreenState extends State<SteamConnectScreen> {
       _messageIsError = !outcome.success;
     });
 
-    if (outcome.success) {
-      // Se actualiza la actividad de los integrantes importados.
+    // Mientras el token siga guardado, el paso se da por hecho aunque la
+    // sincronización falle (cuenta sin familia, red caída…): la actividad se
+    // consulta con el mismo token y se puede reintentar desde Integrantes.
+    // Solo se permanece en esta pantalla si Steam rechazó el token (en cuyo
+    // caso ya se ha borrado para no reintentar en vano).
+    if (controller.hasFamilyToken) {
       unawaited(controller.refreshAll(silent: true));
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(outcome.messageEs)));

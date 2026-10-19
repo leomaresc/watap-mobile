@@ -169,6 +169,13 @@ class AppController extends ChangeNotifier {
   /// sirve para eso.
   bool get hasFamilyToken => _hasFamilyToken;
 
+  /// `true` cuando la app dispone de alguna credencial para consultar Steam:
+  /// el token de sesión (conexión con Steam) o la clave de Web API.
+  ///
+  /// Cualquiera de las dos basta para leer actividad y resúmenes; solo el
+  /// token permite además leer el grupo familiar.
+  bool get hasSteamAuth => _hasApiKey || _hasFamilyToken;
+
   /// Nombre del grupo familiar, en la última sincronización correcta.
   String? get familyGroupName => _familyGroupName;
 
@@ -179,10 +186,11 @@ class AppController extends ChangeNotifier {
 
   /// `true` cuando la aplicación tiene todo lo necesario para funcionar.
   ///
-  /// Se exige además haber pasado el paso del grupo familiar (conectado u
-  /// omitido explícitamente), para no bloquear si la conexión con Steam falla.
+  /// Basta con haber conectado Steam (token) o guardado una clave de Web API,
+  /// o haber omitido explícitamente el paso de conexión, para no bloquear la
+  /// aplicación si la página de Steam no carga.
   bool get onboardingComplete =>
-      _hasApiKey && (_hasFamilyToken || _preferences.familySetupDone);
+      _hasFamilyToken || _hasApiKey || _preferences.familySetupDone;
 
   Preferences get preferences => _preferences;
 
@@ -311,7 +319,9 @@ class AppController extends ChangeNotifier {
       _preferences = await _preferencesRepo.load();
       _hasApiKey = await _keyStore.hasApiKey();
       _api.setApiKey(_hasApiKey ? await _keyStore.loadApiKey() : null);
-      _hasFamilyToken = (await _tokenStore.load()) != null;
+      final String? steamToken = await _tokenStore.load();
+      _hasFamilyToken = steamToken != null;
+      _api.setAccessToken(steamToken);
       _profilesList = await _profiles.loadAll();
       _activities = await _activityRepo.loadAll();
       _section = _preferences.openLastViewedSection
@@ -369,11 +379,13 @@ class AppController extends ChangeNotifier {
 
   /// Guarda el `webapi_token` obtenido desde la página de Steam.
   ///
-  /// El token se escribe **solo** en el almacenamiento seguro del dispositivo.
+  /// El token se escribe **solo** en el almacenamiento seguro del dispositivo y
+  /// se activa de inmediato como credencial de la Steam Web API.
   Future<void> saveFamilyToken(String token) async {
     final String trimmed = token.trim();
     if (trimmed.isEmpty) return;
     await _tokenStore.save(trimmed);
+    _api.setAccessToken(trimmed);
     _hasFamilyToken = true;
     _notify();
   }
@@ -381,6 +393,7 @@ class AppController extends ChangeNotifier {
   /// Elimina el token de Steam del dispositivo.
   Future<OperationResult> disconnectSteam() async {
     await _tokenStore.clear();
+    _api.setAccessToken(null);
     _hasFamilyToken = false;
     _familyGroupName = null;
     _lastFamilySyncUnix = null;
@@ -409,9 +422,10 @@ class AppController extends ChangeNotifier {
         'Ya hay una sincronización del grupo familiar en curso.',
       );
     }
-    if (!_hasApiKey) {
+    if (!_hasFamilyToken) {
       return const FamilySyncOutcome.failure(
-        'Configura la clave de Steam Web API antes de sincronizar.',
+        'Conecta tu cuenta de Steam para leer el grupo familiar.',
+        requiresConnect: true,
       );
     }
 
@@ -435,6 +449,7 @@ class AppController extends ChangeNotifier {
         // El token ya no sirve: se borra para que la interfaz ofrezca volver a
         // conectar en lugar de reintentar en vano.
         await _tokenStore.clear();
+        _api.setAccessToken(null);
         _hasFamilyToken = false;
       }
       return outcome;
@@ -451,12 +466,12 @@ class AppController extends ChangeNotifier {
   /// Cada entrada puede ser un SteamID64, una URL de perfil de Steam o un
   /// nombre personalizado. Las entradas inválidas o duplicadas se omiten.
   Future<ImportResult> importMembers(List<String> rawEntries) async {
-    if (!_hasApiKey) {
+    if (!hasSteamAuth) {
       return const ImportResult(
         added: 0,
         skipped: 0,
         failed: 0,
-        messageEs: 'Necesitas una clave de Steam Web API configurada para '
+        messageEs: 'Conecta tu Steam o guarda una clave de Steam Web API para '
             'importar integrantes.',
         isError: true,
       );
@@ -557,10 +572,10 @@ class AppController extends ChangeNotifier {
     if (input.isSteamId64) {
       steamId64 = input.value;
     } else {
-      if (!_hasApiKey) {
+      if (!hasSteamAuth) {
         return const OperationResult.error(
-          'Para resolver un nombre personalizado hace falta una clave de Steam '
-          'Web API configurada.',
+          'Para resolver un nombre personalizado hace falta conectar tu Steam '
+          'o guardar una clave de Steam Web API.',
         );
       }
       try {
@@ -583,7 +598,7 @@ class AppController extends ChangeNotifier {
 
     String? personaName;
     String? avatarUrl;
-    if (_hasApiKey) {
+    if (hasSteamAuth) {
       try {
         final List<SteamPlayerSummary> summaries =
             await _api.fetchPlayerSummaries(<String>[steamId64]);

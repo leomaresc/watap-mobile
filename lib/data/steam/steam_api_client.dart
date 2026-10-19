@@ -7,8 +7,9 @@
 /// - Distinguir errores de conexión, tiempo de espera y limitación de
 ///   solicitudes (HTTP 429, con `Retry-After` cuando Steam lo envía).
 /// - Limitar las solicitudes simultáneas y evitar duplicados en vuelo.
-/// - Enviar la clave en el encabezado `x-webapi-key`, nunca en la URL ni en
-///   ningún registro.
+/// - Enviar la credencial en el encabezado `x-webapi-key` (clave de Web API)
+///   o como parámetro `access_token` de la URL (token de sesión de Steam),
+///   según corresponda. Ninguna de las dos viaja nunca en un registro.
 library;
 
 import 'dart:async';
@@ -54,8 +55,9 @@ class ApiKeyCheckResult {
 /// endpoint, así que la interpretación se basa en la semántica documentada de
 /// cada operación. Cada decisión está razonada en el código.
 enum _EndpointPolicy {
-  /// `GetPlayerSummaries`: devuelve datos públicos y exige una clave válida.
-  /// Por eso un 401/403 solo puede significar credencial rechazada.
+  /// `GetPlayerSummaries`: devuelve datos públicos y exige una credencial
+  /// válida (clave de Web API o token de sesión). Por eso un 401/403 solo
+  /// puede significar credencial rechazada.
   summaries,
 
   /// `GetRecentlyPlayedGames`: puede fallar por clave o por privacidad.
@@ -97,6 +99,9 @@ class SteamApiClient {
 
   String? _apiKey;
 
+  /// `webapi_token` de la sesión de Steam (obtenido desde el WebView).
+  String? _accessToken;
+
   // --- Control de concurrencia ---------------------------------------------
   int _activeRequests = 0;
   final List<Completer<void>> _waitingSlots = <Completer<void>>[];
@@ -110,6 +115,20 @@ class SteamApiClient {
   /// `true` cuando hay una clave configurada para esta sesión.
   bool get hasApiKey => (_apiKey ?? '').trim().isNotEmpty;
 
+  /// `true` cuando hay un token de sesión de Steam configurado.
+  bool get hasAccessToken => (_accessToken ?? '').trim().isNotEmpty;
+
+  /// `true` cuando hay alguna credencial para consultar la Steam Web API.
+  ///
+  /// La clave de Web API es la vía documentada para los endpoints públicos y
+  /// se prefiere cuando existe. El token de sesión es la vía obligatoria para
+  /// `IFamilyGroupsService` y el respaldo para el resto cuando no hay clave.
+  bool get hasSteamAuth => hasApiKey || hasAccessToken;
+
+  /// `true` cuando las consultas se autenticarán con el token de sesión
+  /// porque no hay clave de Web API.
+  bool get _authenticatingByToken => !hasApiKey && hasAccessToken;
+
   /// Fecha hasta la que no se enviarán solicitudes por limitación del servidor.
   DateTime? get rateLimitedUntil => _rateLimitedUntil;
 
@@ -119,6 +138,17 @@ class SteamApiClient {
   void setApiKey(String? apiKey) {
     final String? value = apiKey?.trim();
     _apiKey = (value == null || value.isEmpty) ? null : value;
+  }
+
+  /// Configura el `webapi_token` de la sesión de Steam.
+  ///
+  /// Cuando no hay clave, este token autentica las consultas como parámetro
+  /// `access_token` de la URL, sobre una conexión HTTPS directa a
+  /// `api.steampowered.com` (el mismo mecanismo que usa la propia web de
+  /// Steam). Nunca se escribe en registros ni en mensajes de error.
+  void setAccessToken(String? token) {
+    final String? value = token?.trim();
+    _accessToken = (value == null || value.isEmpty) ? null : value;
   }
 
   /// Cierra el cliente HTTP si fue creado internamente.
@@ -144,7 +174,7 @@ class SteamApiClient {
     final _HttpResult result = await _get(
       uri,
       policy: _EndpointPolicy.recentlyPlayed,
-      requiresKey: true,
+      requiresAuth: true,
     );
     return parseRecentlyPlayedGames(result.body);
   }
@@ -170,7 +200,7 @@ class SteamApiClient {
       final _HttpResult result = await _get(
         uri,
         policy: _EndpointPolicy.summaries,
-        requiresKey: true,
+        requiresAuth: true,
       );
       summaries.addAll(parsePlayerSummaries(result.body));
     }
@@ -183,7 +213,7 @@ class SteamApiClient {
     final _HttpResult result = await _get(
       uri,
       policy: _EndpointPolicy.vanity,
-      requiresKey: false,
+      requiresAuth: false,
     );
     return parseVanityResolution(result.body);
   }
@@ -260,7 +290,7 @@ class SteamApiClient {
   Future<_HttpResult> _get(
     Uri uri, {
     required _EndpointPolicy policy,
-    required bool requiresKey,
+    required bool requiresAuth,
   }) {
     if (uri.scheme != 'https') {
       throw SteamApiException(
@@ -269,12 +299,19 @@ class SteamApiClient {
         endpoint: uri.path,
       );
     }
-    if (requiresKey && !hasApiKey) {
+    if (requiresAuth && !hasSteamAuth) {
       throw const SteamApiException(
         kind: SteamApiErrorKind.incompleteConfiguration,
-        messageEs: 'Falta la clave de Steam Web API.',
+        messageEs: 'Falta una credencial de Steam: conecta tu cuenta o guarda '
+            'una clave de Steam Web API.',
       );
     }
+
+    // En modo token el `access_token` se añade a la URL; en modo clave viaja
+    // en el encabezado (la URL no cambia).
+    final Uri finalUri = _withAccessToken(uri);
+    final String authMode =
+        hasApiKey ? 'key' : (hasAccessToken ? 'token' : 'none');
 
     final DateTime? until = _rateLimitedUntil;
     if (until != null && DateTime.now().isBefore(until)) {
@@ -288,14 +325,13 @@ class SteamApiClient {
     }
 
     // Deduplicación: dos peticiones idénticas comparten el mismo futuro.
-    final String key = '${uri.toString()}|key:$requiresKey';
+    final String key = '$finalUri|$authMode';
     final Future<_HttpResult>? existing = _inFlight[key];
     if (existing != null) return existing;
 
     final Future<_HttpResult> request = _executeWithSlot(
-      uri,
+      finalUri,
       policy: policy,
-      requiresKey: requiresKey,
     );
     _inFlight[key] = request;
     return request.whenComplete(() {
@@ -303,18 +339,27 @@ class SteamApiClient {
     });
   }
 
+  /// Añade el `access_token` a la URL solo cuando se autentica por token.
+  ///
+  /// Si hay clave de Web API, esta viaja en el encabezado y la URL queda
+  /// intacta (así ninguna credencial se duplica entre URL y cabecera).
+  Uri _withAccessToken(Uri uri) {
+    if (!_authenticatingByToken) return uri;
+    return uri.replace(
+      queryParameters: <String, String>{
+        ...uri.queryParameters,
+        'access_token': _accessToken!,
+      },
+    );
+  }
+
   Future<_HttpResult> _executeWithSlot(
     Uri uri, {
     required _EndpointPolicy policy,
-    required bool requiresKey,
   }) async {
     await _acquireSlot();
     try {
-      return await _executeWithRetries(
-        uri,
-        policy: policy,
-        requiresKey: requiresKey,
-      );
+      return await _executeWithRetries(uri, policy: policy);
     } finally {
       _releaseSlot();
     }
@@ -323,16 +368,11 @@ class SteamApiClient {
   Future<_HttpResult> _executeWithRetries(
     Uri uri, {
     required _EndpointPolicy policy,
-    required bool requiresKey,
   }) async {
     int attempt = 0;
     while (true) {
       try {
-        return await _performRequest(
-          uri,
-          policy: policy,
-          requiresKey: requiresKey,
-        );
+        return await _performRequest(uri, policy: policy);
       } on SteamApiException catch (e) {
         // Nunca se reintenta un 429: se respeta la ventana indicada por Steam.
         final bool retryable = e.kind == SteamApiErrorKind.network ||
@@ -348,15 +388,14 @@ class SteamApiClient {
   Future<_HttpResult> _performRequest(
     Uri uri, {
     required _EndpointPolicy policy,
-    required bool requiresKey,
   }) async {
     final Map<String, String> headers = <String, String>{
       'Accept': 'application/json',
     };
-    if (requiresKey || hasApiKey) {
-      // La clave viaja únicamente en el encabezado. Nunca se registra.
-      final String? key = _apiKey;
-      if (key != null) headers[AppConstants.steamApiKeyHeader] = key;
+    if (hasApiKey) {
+      // La clave viaja únicamente en el encabezado. Nunca se registra. En
+      // modo token no hay cabecera de credencial: el token va en la URL.
+      headers[AppConstants.steamApiKeyHeader] = _apiKey!;
     }
 
     http.Response response;
@@ -442,6 +481,17 @@ class SteamApiClient {
         switch (policy) {
           case _EndpointPolicy.summaries:
           case _EndpointPolicy.vanity:
+            // En modo token no hay "clave": el rechazo significa que la sesión
+            // ha caducado o no autoriza, así que se pide reconectar.
+            if (_authenticatingByToken) {
+              return SteamApiException(
+                kind: SteamApiErrorKind.invalidCredentials,
+                messageEs:
+                    defaultSteamErrorMessage(SteamApiErrorKind.invalidCredentials),
+                statusCode: statusCode,
+                endpoint: endpoint,
+              );
+            }
             return SteamApiException(
               kind: SteamApiErrorKind.invalidApiKey,
               messageEs: defaultSteamErrorMessage(SteamApiErrorKind.invalidApiKey),

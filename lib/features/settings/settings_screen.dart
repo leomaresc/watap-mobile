@@ -109,16 +109,16 @@ class SettingsScreen extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         SectionCard(
-          title: 'STEAM WEB API',
-          subtitle: 'La clave se guarda solo en el almacenamiento seguro del '
-              'dispositivo',
+          title: 'CLAVE DE WEB API (OPCIONAL)',
+          subtitle: 'Respaldo por si la conexión con Steam no funciona. Se '
+              'guarda solo en el almacenamiento seguro del dispositivo',
           children: <Widget>[
             ListTile(
               leading: Icon(
                 controller.hasApiKey ? Icons.key : Icons.key_off_outlined,
                 color: controller.hasApiKey
                     ? WatapColors.success
-                    : WatapColors.warning,
+                    : WatapColors.textSecondary,
               ),
               title: Text(
                 controller.hasApiKey ? 'Clave configurada' : 'Sin clave configurada',
@@ -127,8 +127,8 @@ class SettingsScreen extends StatelessWidget {
                 controller.hasApiKey
                     ? 'Guardada en el almacén seguro. WATAP no muestra su '
                         'contenido ni la incluye en registros.'
-                    : 'Sin clave no se puede consultar la actividad de los '
-                        'integrantes.',
+                    : 'No hace falta normalmente: la conexión con Steam ya '
+                        'autentica las consultas. Solo se usa como respaldo.',
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(

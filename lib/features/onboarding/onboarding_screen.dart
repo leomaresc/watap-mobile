@@ -1,12 +1,15 @@
 /// Asistente de configuración inicial.
 ///
-/// Dos pasos:
-/// 1. Clave de Steam Web API (indispensable para leer la actividad).
-/// 2. Conexión con Steam mediante un WebView de la página oficial, para poder
-///    leer el grupo familiar e importar los integrantes automáticamente.
+/// **Un solo paso**: conectar la cuenta de Steam mediante la página oficial de
+/// Valve dentro de un WebView. Con el token resultante la app:
+/// - lee el grupo familiar (`IFamilyGroupsService`) e importa los
+///   integrantes solos;
+/// - consulta la actividad de cada uno (`GetRecentlyPlayedGames`).
 ///
-/// El paso 2 puede omitirse explícitamente para no bloquear la aplicación si la
-/// página de Steam no carga; puede conectarse más tarde desde Integrantes.
+/// No se pide una clave de Web API ni enlaces manuales. Por eso se ofrece la
+/// clave únicamente como **respaldo** (si la página de Steam no carga), y un
+/// botón para omitir el paso de forma explícita: la aplicación nunca debe
+/// quedar bloqueada.
 library;
 
 import 'package:flutter/material.dart';
@@ -25,8 +28,8 @@ class OnboardingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppController controller = AppScope.of(context);
-    final bool hasKey = controller.hasApiKey;
     final bool connected = controller.hasFamilyToken;
+    final bool hasKey = controller.hasApiKey;
 
     return Scaffold(
       appBar: AppBar(
@@ -37,7 +40,7 @@ class OnboardingScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: <Widget>[
           const Text(
-            'Dos pasos y WATAP queda listo',
+            'Un solo paso',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w800,
@@ -46,9 +49,9 @@ class OnboardingScreen extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text(
-            'La clave consulta la actividad de cada integrante. La conexión con '
-            'Steam sirve para leer tu grupo familiar y añadirlos solos, sin '
-            'que tengas que copiar nada a mano.',
+            'Conecta tu cuenta de Steam y WATAP leerá tu grupo familiar y la '
+            'actividad de sus integrantes: se añaden solos, con nombre y '
+            'avatar. No hace falta pedir una clave de API ni copiar enlaces.',
             style: TextStyle(
               fontSize: 13,
               color: WatapColors.textSecondary,
@@ -58,32 +61,17 @@ class OnboardingScreen extends StatelessWidget {
           const SizedBox(height: 18),
           _StepCard(
             index: 1,
-            title: 'Clave de Steam Web API',
-            description:
-                'Consulta los juegos recientes de cada integrante. Es gratuita '
-                'y se solicita en la página oficial de Steam.',
-            done: hasKey,
-            doneText: 'Clave guardada en el almacenamiento seguro.',
-            pendingText: 'Falta configurar la clave.',
-            actionLabel: hasKey ? 'Cambiar la clave' : 'Configurar la clave',
-            onAction: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (BuildContext _) => const ApiKeyScreen(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          _StepCard(
-            index: 2,
-            title: 'Conectar con Steam (grupo familiar)',
+            title: 'Conectar con Steam',
             description:
                 'Se abre la página oficial de inicio de sesión de Steam dentro '
-                'de la app. Tu contraseña va directamente a Steam: WATAP no la '
-                've ni la guarda. Después se leen tus integrantes solos.',
-            done: connected,
+                'de la app. Tu contraseña va directamente a Valve: WATAP no la '
+                've ni la guarda. Después se leen tu familia y su actividad '
+                'con un token temporal.',
+            done: connected || hasKey,
             doneText: connected
-                ? 'Conectado. El grupo familiar se puede sincronizar.'
-                : 'Sin conectar: tendrás que añadir integrantes a mano.',
+                ? 'Conectado. Tu grupo familiar se puede sincronizar.'
+                : 'Clave de API guardada (modo respaldo). El grupo familiar '
+                    'se leerá cuando conectes Steam.',
             pendingText: 'Pendiente de conexión.',
             actionLabel: connected ? 'Volver a conectar' : 'Conectar con Steam',
             onAction: () => Navigator.of(context).push(
@@ -93,40 +81,41 @@ class OnboardingScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 18),
-          if (hasKey && connected)
+          if (connected)
             const InlineNotice(
               message: 'Todo listo. Tus integrantes del grupo familiar se han '
-                  'importado automáticamente.',
+                  'importado automáticamente y su actividad se consulta con el '
+                  'mismo token.',
               icon: Icons.check_circle_outline,
               color: WatapColors.success,
             )
-          else if (hasKey)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                const InlineNotice(
-                  message: 'La clave se guarda solo en el almacén seguro del '
-                      'dispositivo. Nunca se escribe en la base de datos ni en '
-                      'archivos.',
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () => _skip(context),
-                  icon: const Icon(Icons.skip_next, size: 18),
-                  label: const Text('Omitir el paso 2 por ahora'),
-                ),
-              ],
-            )
-          else
+          else ...<Widget>[
             const InlineNotice(
-              message: 'Empieza por la clave de Steam Web API.',
-              icon: Icons.key_outlined,
-              color: WatapColors.warning,
+              message: 'Solo se guarda un token temporal en el almacén seguro '
+                  'del dispositivo. Nunca se escribe en la base de datos, en '
+                  'archivos ni en la nube.',
+              icon: Icons.lock_outline,
             ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => _skip(context),
+              icon: const Icon(Icons.skip_next, size: 18),
+              label: const Text('Omitir el paso por ahora'),
+            ),
+            TextButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (BuildContext _) => const ApiKeyScreen(),
+                ),
+              ),
+              icon: const Icon(Icons.key_outlined, size: 18),
+              label: const Text('¿No te funciona? Usar clave de Web API'),
+            ),
+          ],
           const SizedBox(height: 16),
-          Text(
+          const Text(
             'Versión ${AppConstants.appVersion}',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               color: WatapColors.textSecondary,
             ),
